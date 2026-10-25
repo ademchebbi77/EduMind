@@ -19,6 +19,9 @@ urlpatterns = [
     ),
     path("api/courses/", include("courses.urls")),
     path("api/", include("assessments.urls")),
+    path("api/sessions/", include("sessions.urls")),
+    path("api/enrollments/", include("sessions.enrollment_urls")),
+    path("api/announcements/", include("announcements.urls")),
     path("api/config/", ApiConfigView.as_view(), name="api-config"),
     re_path(r"^api(?:/.*)?$", api_not_found),
 ]

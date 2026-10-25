@@ -20,6 +20,11 @@ import QuizDetailPage from './pages/assessments/QuizDetailPage'
 import QuizFormPage from './pages/assessments/QuizFormPage'
 import QuizResultPage from './pages/assessments/QuizResultPage'
 import QuizTakePage from './pages/assessments/QuizTakePage'
+import SessionsPage from './pages/sessions/SessionsPage'
+import SessionFormPage from './pages/sessions/SessionFormPage'
+import SessionDetailPage from './pages/sessions/SessionDetailPage'
+import AnnouncementsPage from './pages/announcements/AnnouncementsPage'
+import AnnouncementFormPage from './pages/announcements/AnnouncementFormPage'
 
 const COURSE_MANAGER_ROLES = ['teacher', 'admin']
 const ADMIN_ROLES = ['admin']
@@ -56,6 +61,8 @@ export default function App() {
                     </RequireRole>
                   }
                 />
+
+                {/* Cours */}
                 <Route path="/courses" element={<CoursesPage />} />
                 <Route
                   path="/courses/new"
@@ -74,6 +81,8 @@ export default function App() {
                     </RequireRole>
                   }
                 />
+
+                {/* Assessments (Quiz & Exercices) */}
                 <Route path="/assessments" element={<AssessmentsPage />} />
                 <Route
                   path="/quizzes/new"
@@ -115,6 +124,45 @@ export default function App() {
                   element={
                     <RequireRole roles={COURSE_MANAGER_ROLES}>
                       <ExerciseFormPage />
+                    </RequireRole>
+                  }
+                />
+
+                {/* Sessions en ligne */}
+                <Route path="/sessions" element={<SessionsPage />} />
+                <Route
+                  path="/sessions/new"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <SessionFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route path="/sessions/:sessionId" element={<SessionDetailPage />} />
+                <Route
+                  path="/sessions/:sessionId/edit"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <SessionFormPage />
+                    </RequireRole>
+                  }
+                />
+
+                {/* Annonces */}
+                <Route path="/announcements" element={<AnnouncementsPage />} />
+                <Route
+                  path="/announcements/new"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <AnnouncementFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/announcements/:announcementId/edit"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <AnnouncementFormPage />
                     </RequireRole>
                   }
                 />

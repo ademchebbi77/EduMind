@@ -1,0 +1,146 @@
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect
+from rest_framework import filters, serializers, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+
+from accounts.models import User
+from accounts.permissions import IsAdminRole
+
+from .models import LiveSession, SessionEnrollment
+from .permissions import CanManageEnrollment, CanManageSession
+from .serializers import LiveSessionSerializer, SessionEnrollmentSerializer
+
+
+class LiveSessionViewSet(viewsets.ModelViewSet):
+    serializer_class = LiveSessionSerializer
+    permission_classes = [IsAuthenticated, CanManageSession]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["title", "description"]
+    ordering_fields = ["starts_at", "created_at", "title", "status"]
+    ordering = ["starts_at"]
+
+    def get_queryset(self):
+        queryset = (
+            LiveSession.objects.select_related("created_by", "course")
+            .prefetch_related("assigned_teachers", "enrollments")
+            .all()
+        )
+
+        session_type = self.request.query_params.get("type")
+        if session_type:
+            if session_type not in LiveSession.SessionType.values:
+                raise serializers.ValidationError(
+                    {"type": "Le type doit être 'course' ou 'training'."}
+                )
+            queryset = queryset.filter(session_type=session_type)
+
+        session_status = self.request.query_params.get("status")
+        if session_status:
+            if session_status not in LiveSession.Status.values:
+                raise serializers.ValidationError(
+                    {"status": "Statut invalide."}
+                )
+            queryset = queryset.filter(status=session_status)
+
+        # Un teacher ne voit que ses propres sessions + les formations où il est assigné
+        user = self.request.user
+        if user.role == User.Role.TEACHER:
+            queryset = queryset.filter(
+                created_by=user
+            ) | queryset.filter(assigned_teachers=user)
+            queryset = queryset.distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+    @method_decorator(csrf_protect)
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
+    @method_decorator(csrf_protect)
+    def update(self, request, *args, **kwargs):
+        return super().update(request, *args, **kwargs)
+
+    @method_decorator(csrf_protect)
+    def partial_update(self, request, *args, **kwargs):
+        return super().partial_update(request, *args, **kwargs)
+
+    @method_decorator(csrf_protect)
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)
+
+    @action(
+        detail=True,
+        methods=["patch"],
+        url_path="status",
+        permission_classes=[IsAuthenticated, IsAdminRole],
+    )
+    @method_decorator(csrf_protect)
+    def update_status(self, request, pk=None):
+        session = self.get_object()
+        new_status = request.data.get("status")
+        if new_status not in LiveSession.Status.values:
+            return Response(
+                {"status": "Statut invalide."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        session.status = new_status
+        session.save(update_fields=["status", "updated_at"])
+        return Response(LiveSessionSerializer(session, context={"request": request}).data)
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="enrollments",
+        permission_classes=[IsAuthenticated, IsAdminRole],
+    )
+    def list_enrollments(self, request, pk=None):
+        session = self.get_object()
+        enrollments = session.enrollments.select_related("student").all()
+        serializer = SessionEnrollmentSerializer(
+            enrollments, many=True, context={"request": request}
+        )
+        return Response(serializer.data)
+
+
+class SessionEnrollmentViewSet(viewsets.ModelViewSet):
+    serializer_class = SessionEnrollmentSerializer
+    permission_classes = [IsAuthenticated, CanManageEnrollment]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = SessionEnrollment.objects.select_related("session", "student").all()
+
+        if user.role != User.Role.ADMIN:
+            queryset = queryset.filter(student=user)
+
+        session_id = self.request.query_params.get("session")
+        if session_id:
+            queryset = queryset.filter(session_id=session_id)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(student=self.request.user)
+
+    @method_decorator(csrf_protect)
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
+    @method_decorator(csrf_protect)
+    def update(self, request, *args, **kwargs):
+        if request.user.role != User.Role.ADMIN:
+            return Response(
+                {"detail": "Seul un administrateur peut modifier le statut d'une inscription."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().update(request, *args, **kwargs)
+
+    @method_decorator(csrf_protect)
+    def destroy(self, request, *args, **kwargs):
+        return super().destroy(request, *args, **kwargs)

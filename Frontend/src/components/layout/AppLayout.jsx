@@ -6,10 +6,12 @@ import {
   LayoutDashboard,
   Loader2,
   LogOut,
+  Megaphone,
   Menu,
   Pencil,
   Plus,
   Users,
+  Video,
   X,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -90,6 +92,14 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
           <ClipboardCheck className="size-5" aria-hidden="true" />
           Quizzes &amp; exercises
         </NavLink>
+        <NavLink to="/sessions" onClick={onNavigate} className={navLinkClasses}>
+          <Video className="size-5" aria-hidden="true" />
+          Sessions en ligne
+        </NavLink>
+        <NavLink to="/announcements" onClick={onNavigate} className={navLinkClasses}>
+          <Megaphone className="size-5" aria-hidden="true" />
+          Annonces
+        </NavLink>
 
         {canManageCourses(user?.role) ? (
           <>
@@ -107,6 +117,14 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/exercises/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />
               Add an exercise
+            </NavLink>
+            <NavLink to="/sessions/new" onClick={onNavigate} className={navLinkClasses}>
+              <Video className="size-5" aria-hidden="true" />
+              Nouvelle session
+            </NavLink>
+            <NavLink to="/announcements/new" onClick={onNavigate} className={navLinkClasses}>
+              <Megaphone className="size-5" aria-hidden="true" />
+              Nouvelle annonce
             </NavLink>
           </>
         ) : null}
