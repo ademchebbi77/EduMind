@@ -5,6 +5,7 @@ import {
   FileText,
   Headphones,
   Pencil,
+  Sparkles,
   Trash2,
   UserRound,
   Users,
@@ -24,10 +25,14 @@ export function CourseCard({
   onDelete,
   onEnrollmentChange,
   showEnrollmentCount = false,
+  recommendation = null,
 }) {
   const Icon = FORMAT_ICONS[course.type] || FileText
   const badgeVariant = FORMAT_BADGES[course.type] || 'brand'
   const tags = Array.isArray(course.tags) ? course.tags : []
+  const matchScore = Number.isFinite(recommendation?.confidence)
+    ? `${Math.round(recommendation.confidence * 100)}% match`
+    : null
 
   return (
     <article className="surface group relative flex h-full flex-col overflow-hidden transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
@@ -52,6 +57,11 @@ export function CourseCard({
         )}
 
         <span className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+          {recommendation ? (
+            <Badge variant="brand" className="bg-paper/95">
+              Recommended
+            </Badge>
+          ) : null}
           <Badge variant={badgeVariant}>{course.type_display || course.type}</Badge>
           {course.category_name ? (
             <Badge variant="neutral" className="bg-paper/95">
@@ -98,6 +108,18 @@ export function CourseCard({
               </li>
             ) : null}
           </ul>
+        ) : null}
+
+        {recommendation ? (
+          <div className="mt-3 rounded-xl border border-brand/15 bg-brand/5 px-3 py-2 text-xs text-brand-strong">
+            <p className="flex items-start gap-1.5 font-medium leading-relaxed">
+              <Sparkles className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+              <span>{recommendation.reason || 'Recommended for you'}</span>
+            </p>
+            {matchScore ? (
+              <p className="mt-1.5 font-semibold">{matchScore}</p>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">

@@ -33,6 +33,14 @@ export async function fetchMyCourses(
   return data
 }
 
+export async function fetchRecommendations({ limit = 5 } = {}, { signal } = {}) {
+  const { data } = await api.get('/courses/ml-recommendations/', {
+    params: { limit },
+    signal,
+  })
+  return data
+}
+
 export async function fetchCourse(courseId, { signal } = {}) {
   const { data } = await api.get(`/courses/${courseId}/`, { signal })
   return data

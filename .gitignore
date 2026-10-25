@@ -19,6 +19,7 @@ htmlcov/
 media/
 staticfiles/
 *.sqlite3
+ml_models/
 
 # Frontend
 node_modules/

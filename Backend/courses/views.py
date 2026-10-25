@@ -1,3 +1,5 @@
+import logging
+import time
 from pathlib import Path
 
 from django.conf import settings
@@ -14,6 +16,12 @@ from rest_framework.response import Response
 from accounts.models import User
 
 from .file_serving import build_course_file_response
+from .ml_recommendations import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
+    popular_course_recommendations,
+    recommend_courses,
+)
 from .models import Category, Course, CourseProgress, CourseTranscript, Enrollment
 from .permissions import CanManageCategory, CanManageCourse, CanManageEnrollment
 from .progress import get_or_create_progress, record_progress
@@ -33,10 +41,19 @@ from .transcripts import (
 )
 from .validators import THUMBNAIL_CONTENT_TYPES
 
+logger = logging.getLogger(__name__)
+
+
 class TranscriptServiceUnavailable(APIException):
     status_code = 503
     default_detail = "Transcript generation is not available."
     default_code = "transcript_unavailable"
+
+
+class RecommendationServiceUnavailable(APIException):
+    status_code = 503
+    default_detail = "Recommendations are temporarily unavailable."
+    default_code = "recommendations_unavailable"
 
 
 NO_TRANSCRIPT = {
@@ -362,6 +379,97 @@ class CourseViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="ml-recommendations",
+        url_name="ml-recommendations",
+        permission_classes=[IsAuthenticated],
+    )
+    def ml_recommendations(self, request):
+        if request.user.role != User.Role.STUDENT:
+            raise PermissionDenied(
+                "Only students receive course recommendations."
+            )
+
+        raw_limit = request.query_params.get("limit", DEFAULT_LIMIT)
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            raise serializers.ValidationError(
+                {"limit": "The limit must be a whole number."}
+            )
+        if not 1 <= limit <= MAX_LIMIT:
+            raise serializers.ValidationError(
+                {
+                    "limit": (
+                        f"The limit must be between 1 and {MAX_LIMIT}."
+                    )
+                }
+            )
+
+        started = time.perf_counter()
+        enrolled_ids = list(
+            Enrollment.objects.filter(student_id=request.user.id).values_list(
+                "course_id", flat=True
+            )
+        )
+        algorithm = "hybrid" if enrolled_ids else "popular"
+
+        try:
+            items = recommend_courses(
+                request.user.id,
+                limit=limit,
+                exclude_ids=enrolled_ids,
+            )
+        except Exception:
+            logger.exception(
+                "Recommendation engine failed for student %s", request.user.id
+            )
+            algorithm = "popular"
+            try:
+                items = popular_course_recommendations(
+                    request.user.id, limit
+                )
+            except Exception:
+                logger.exception(
+                    "Popular recommendation fallback failed for student %s",
+                    request.user.id,
+                )
+                raise RecommendationServiceUnavailable()
+
+        courses = {
+            course.pk: course
+            for course in Course.objects.select_related(
+                "owner", "category"
+            ).filter(pk__in=[item["course_id"] for item in items])
+        }
+
+        recommendations = []
+        for item in items:
+            course = courses.get(item["course_id"])
+            if course is None:
+                continue
+            course.is_enrolled = False
+            data = CourseSerializer(
+                course, context={"request": request}
+            ).data
+            data["category_id"] = data.get("category")
+            data["category"] = data.get("category_name")
+            data["confidence"] = item["confidence"]
+            data["reason"] = item["reason"]
+            recommendations.append(data)
+
+        return Response(
+            {
+                "recommendations": recommendations,
+                "algorithm": algorithm,
+                "computed_in_ms": round(
+                    (time.perf_counter() - started) * 1000, 2
+                ),
+            }
+        )
 
 
 class EnrollmentViewSet(viewsets.ModelViewSet):

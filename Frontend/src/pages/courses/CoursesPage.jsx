@@ -30,6 +30,7 @@ import { CardSkeleton } from '../../components/ui/Skeleton'
 import { CourseCard } from '../../components/courses/CourseCard'
 import { DeleteCourseModal } from '../../components/courses/DeleteCourseModal'
 import { Pagination } from '../../components/courses/Pagination'
+import { RecommendedCourses } from '../../components/courses/RecommendedCourses'
 
 const ORDERING_OPTIONS = [
   { value: '-created_at', label: 'Newest first' },
@@ -64,6 +65,7 @@ export default function CoursesPage() {
   const [categoriesReload, setCategoriesReload] = useState(0)
 
   const [reload, setReload] = useState(0)
+  const [recommendationReload, setRecommendationReload] = useState(0)
 
   const [courseToDelete, setCourseToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
@@ -151,6 +153,8 @@ export default function CoursesPage() {
   }
 
   function handleEnrollmentChange(courseId, changes) {
+    setRecommendationReload((current) => current + 1)
+
     if (myCourses) {
       setReload((current) => current + 1)
       return
@@ -222,6 +226,13 @@ export default function CoursesPage() {
           </div>
         ) : null}
       </header>
+
+      {isStudent ? (
+        <RecommendedCourses
+          refreshKey={recommendationReload}
+          onEnrollmentChange={handleEnrollmentChange}
+        />
+      ) : null}
 
       <Card className="bg-paper/90">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr]">

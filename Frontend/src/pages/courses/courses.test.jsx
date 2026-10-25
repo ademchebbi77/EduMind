@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   updateCourseProgress: vi.fn(),
   fetchCourseTranscript: vi.fn(),
   generateCourseTranscript: vi.fn(),
+  fetchRecommendations: vi.fn(),
   config: {
     max_upload_size_mb: 50,
     max_upload_size_bytes: 50 * 1024 * 1024,
@@ -59,6 +60,7 @@ vi.mock('../../api/courses', () => ({
   updateCourseProgress: mocks.updateCourseProgress,
   fetchCourseTranscript: mocks.fetchCourseTranscript,
   generateCourseTranscript: mocks.generateCourseTranscript,
+  fetchRecommendations: mocks.fetchRecommendations,
 }))
 vi.mock('../../hooks/useAppConfig', () => ({
   useAppConfig: () => ({
@@ -130,6 +132,21 @@ const OWNED_VIDEO_COURSE = {
   type: 'video',
   type_display: 'Video',
   video_url: '',
+}
+
+const RECOMMENDED_COURSE = {
+  ...OTHER_COURSE,
+  id: 5,
+  title: 'Machine learning foundations',
+  description: 'Train your first models.',
+  category: 'Programming',
+  category_id: 3,
+  category_name: 'Programming',
+  thumbnail_url: null,
+  is_enrolled: false,
+  can_enroll: true,
+  confidence: 0.87,
+  reason: 'Based on your enrollment in Python Basics',
 }
 
 const EMPTY_TRANSCRIPT = {
@@ -212,6 +229,11 @@ beforeEach(() => {
     last_viewed_at: null,
   })
   mocks.fetchCourseTranscript.mockResolvedValue(EMPTY_TRANSCRIPT)
+  mocks.fetchRecommendations.mockResolvedValue({
+    recommendations: [],
+    algorithm: 'hybrid',
+    computed_in_ms: 5,
+  })
   mocks.generateCourseTranscript.mockResolvedValue({
     ...EMPTY_TRANSCRIPT,
     status: 'queued',
@@ -346,6 +368,69 @@ describe('CoursesPage', () => {
     await screen.findByRole('heading', { name: 'My course' })
     expect(screen.queryByRole('link', { name: /add a course/i })).toBeNull()
     expect(screen.queryByRole('link', { name: /^edit “/i })).toBeNull()
+  })
+
+  it('shows personalized recommendations to students', async () => {
+    signInAs(STUDENT)
+    mocks.fetchRecommendations.mockResolvedValue({
+      recommendations: [RECOMMENDED_COURSE],
+      algorithm: 'hybrid',
+      computed_in_ms: 12,
+    })
+    renderRoute('/courses')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Recommended for you' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: RECOMMENDED_COURSE.title })).toBeInTheDocument()
+    expect(screen.getByText('Recommended')).toBeInTheDocument()
+    expect(screen.getByText('87% match')).toBeInTheDocument()
+    expect(
+      screen.getByText('Based on your enrollment in Python Basics'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Hybrid ML')).toBeInTheDocument()
+  })
+
+  it('does not request recommendations for teachers', async () => {
+    renderRoute('/courses')
+
+    await screen.findByRole('heading', { name: 'My course' })
+    expect(mocks.fetchRecommendations).not.toHaveBeenCalled()
+    expect(
+      screen.queryByRole('heading', { name: 'Recommended for you' }),
+    ).toBeNull()
+  })
+
+  it('falls back to popular courses when recommendations fail', async () => {
+    signInAs(STUDENT)
+    mocks.fetchRecommendations.mockRejectedValue(new Error('offline'))
+    mocks.fetchCourses.mockImplementation((params) =>
+      Promise.resolve(
+        params.ordering === '-enrolled_count'
+          ? {
+              count: 1,
+              next: null,
+              previous: null,
+              results: [RECOMMENDED_COURSE],
+            }
+          : {
+              count: 2,
+              next: null,
+              previous: null,
+              results: [OWNED_COURSE, OTHER_COURSE],
+            },
+      ),
+    )
+    renderRoute('/courses')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Popular courses' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Popular with students.')).toBeInTheDocument()
+    expect(mocks.fetchCourses).toHaveBeenCalledWith(
+      expect.objectContaining({ ordering: '-enrolled_count', pageSize: 5 }),
+      expect.anything(),
+    )
   })
 })
 
