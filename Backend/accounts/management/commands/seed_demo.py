@@ -3,6 +3,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.core.files.base import ContentFile
 
 from accounts.models import User
+from assessments.demo import seed_assessments
 from courses.demo_files import build_pdf, build_wav
 from courses.models import Course
 
@@ -140,6 +141,12 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"{len(DEMO_COURSES)} demo courses available "
                 f"({created_courses} file(s) generated)."
+            )
+        )
+        created_assessments = seed_assessments()
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Demo quizzes and exercises ready ({created_assessments} created)."
             )
         )
         self.stdout.write(

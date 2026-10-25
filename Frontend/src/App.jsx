@@ -13,9 +13,17 @@ import CourseFormPage from './pages/courses/CourseFormPage'
 import CoursesPage from './pages/courses/CoursesPage'
 import UserEditPage from './pages/admin/UserEditPage'
 import UsersPage from './pages/admin/UsersPage'
+import AssessmentsPage from './pages/assessments/AssessmentsPage'
+import ExerciseDetailPage from './pages/assessments/ExerciseDetailPage'
+import ExerciseFormPage from './pages/assessments/ExerciseFormPage'
+import QuizDetailPage from './pages/assessments/QuizDetailPage'
+import QuizFormPage from './pages/assessments/QuizFormPage'
+import QuizResultPage from './pages/assessments/QuizResultPage'
+import QuizTakePage from './pages/assessments/QuizTakePage'
 
 const COURSE_MANAGER_ROLES = ['teacher', 'admin']
 const ADMIN_ROLES = ['admin']
+const STUDENT_ROLES = ['student']
 
 export default function App() {
   return (
@@ -63,6 +71,50 @@ export default function App() {
                   element={
                     <RequireRole roles={COURSE_MANAGER_ROLES}>
                       <CourseFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route path="/assessments" element={<AssessmentsPage />} />
+                <Route
+                  path="/quizzes/new"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <QuizFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route path="/quizzes/:quizId" element={<QuizDetailPage />} />
+                <Route
+                  path="/quizzes/:quizId/edit"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <QuizFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/quizzes/:quizId/take"
+                  element={
+                    <RequireRole roles={STUDENT_ROLES}>
+                      <QuizTakePage />
+                    </RequireRole>
+                  }
+                />
+                <Route path="/quizzes/:quizId/attempts/:attemptId" element={<QuizResultPage />} />
+                <Route
+                  path="/exercises/new"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <ExerciseFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route path="/exercises/:exerciseId" element={<ExerciseDetailPage />} />
+                <Route
+                  path="/exercises/:exerciseId/edit"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <ExerciseFormPage />
                     </RequireRole>
                   }
                 />

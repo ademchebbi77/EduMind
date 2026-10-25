@@ -2,6 +2,7 @@
 source =
     accounts
     courses
+    assessments
 branch = True
 omit =
     */migrations/*

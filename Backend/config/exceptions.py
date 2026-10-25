@@ -20,7 +20,11 @@ def _normalize_fields(data):
     if isinstance(data, dict):
         return {str(key): _normalize_fields(value) for key, value in data.items()}
     if isinstance(data, (list, tuple)):
-        return [str(item) for item in data]
+        # Nested serializers (many=True) report one dict per item.
+        return [
+            _normalize_fields(item) if isinstance(item, dict) else str(item)
+            for item in data
+        ]
     return [str(data)]
 
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BookOpen,
+  ClipboardCheck,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -85,6 +86,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
           <BookOpen className="size-5" aria-hidden="true" />
           Courses
         </NavLink>
+        <NavLink to="/assessments" onClick={onNavigate} className={navLinkClasses}>
+          <ClipboardCheck className="size-5" aria-hidden="true" />
+          Quizzes &amp; exercises
+        </NavLink>
 
         {canManageCourses(user?.role) ? (
           <>
@@ -94,6 +99,14 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/courses/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />
               Add a course
+            </NavLink>
+            <NavLink to="/quizzes/new" onClick={onNavigate} className={navLinkClasses}>
+              <Plus className="size-5" aria-hidden="true" />
+              Add a quiz
+            </NavLink>
+            <NavLink to="/exercises/new" onClick={onNavigate} className={navLinkClasses}>
+              <Plus className="size-5" aria-hidden="true" />
+              Add an exercise
             </NavLink>
           </>
         ) : null}

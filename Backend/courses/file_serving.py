@@ -52,26 +52,37 @@ def parse_range_header(header: str, size: int):
     return start, end
 
 
-def _display_filename(course) -> str:
-    extension = Path(course.file.name).suffix.lower()
-    base = slugify(course.title)[:80] or "course"
+def _display_filename(field_file, title, fallback) -> str:
+    extension = Path(field_file.name).suffix.lower()
+    base = slugify(title)[:80] or fallback
     return f"{base}{extension}"
 
 
 def build_course_file_response(request, course, as_attachment: bool):
-    extension = Path(course.file.name).suffix.lower().lstrip(".")
+    return build_file_response(
+        request,
+        course.file,
+        _display_filename(course.file, course.title, "course"),
+        as_attachment,
+    )
+
+
+def build_file_response(request, field_file, filename, as_attachment: bool):
+    """Serve a private stored file with HTTP Range support."""
+    if not field_file:
+        raise NotFound("The requested file could not be found.")
+    extension = Path(field_file.name).suffix.lower().lstrip(".")
     content_type = CONTENT_TYPE_BY_EXTENSION.get(extension, "application/octet-stream")
-    filename = _display_filename(course)
-    storage = course.file.storage
-    file_name = course.file.name
+    storage = field_file.storage
+    file_name = field_file.name
 
     try:
         size = storage.size(file_name)
     except (FileNotFoundError, OSError) as error:
-        raise NotFound("The file for this course could not be found.") from error
+        raise NotFound("The requested file could not be found.") from error
 
     if size <= 0:
-        raise NotFound("The file for this course could not be found.")
+        raise NotFound("The requested file could not be found.")
 
     byte_range = parse_range_header(request.headers.get("Range"), size)
 
@@ -88,7 +99,7 @@ def build_course_file_response(request, course, as_attachment: bool):
         try:
             handle = storage.open(file_name, "rb")
         except (FileNotFoundError, OSError) as error:
-            raise NotFound("The file for this course could not be found.") from error
+            raise NotFound("The requested file could not be found.") from error
 
         def stream():
             try:
@@ -114,7 +125,7 @@ def build_course_file_response(request, course, as_attachment: bool):
         try:
             handle = storage.open(file_name, "rb")
         except (FileNotFoundError, OSError) as error:
-            raise NotFound("The file for this course could not be found.") from error
+            raise NotFound("The requested file could not be found.") from error
         response = FileResponse(handle, content_type=content_type)
 
     response["Accept-Ranges"] = "bytes"
