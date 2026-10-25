@@ -46,6 +46,21 @@ export async function fetchCourse(courseId, { signal } = {}) {
   return data
 }
 
+export async function analyzeCourseContent(
+  { file, courseId } = {},
+  { onUploadProgress } = {},
+) {
+  const formData = new FormData()
+  if (file) formData.append('file', file)
+  if (courseId) formData.append('course_id', String(courseId))
+
+  const { data } = await api.post('/courses/analyze-content/', formData, {
+    onUploadProgress,
+    timeout: 0,
+  })
+  return data
+}
+
 export async function createCourse(formData, { onUploadProgress } = {}) {
   const { data } = await api.post('/courses/', formData, {
     onUploadProgress,

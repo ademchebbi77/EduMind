@@ -66,6 +66,11 @@ class Course(models.Model):
         AUDIO = "audio", "Audio"
         VIDEO = "video", "Video"
 
+    class Difficulty(models.TextChoices):
+        BEGINNER = "beginner", "Beginner"
+        INTERMEDIATE = "intermediate", "Intermediate"
+        ADVANCED = "advanced", "Advanced"
+
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     type = models.CharField(max_length=10, choices=Type.choices, editable=False)
@@ -89,6 +94,12 @@ class Course(models.Model):
         related_name="courses",
     )
     tags = models.CharField(max_length=500, blank=True)
+    difficulty = models.CharField(
+        max_length=12,
+        choices=Difficulty.choices,
+        blank=True,
+        default="",
+    )
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

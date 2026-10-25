@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   fetchCourseTranscript: vi.fn(),
   generateCourseTranscript: vi.fn(),
   fetchRecommendations: vi.fn(),
+  analyzeCourseContent: vi.fn(),
   config: {
     max_upload_size_mb: 50,
     max_upload_size_bytes: 50 * 1024 * 1024,
@@ -61,6 +62,7 @@ vi.mock('../../api/courses', () => ({
   fetchCourseTranscript: mocks.fetchCourseTranscript,
   generateCourseTranscript: mocks.generateCourseTranscript,
   fetchRecommendations: mocks.fetchRecommendations,
+  analyzeCourseContent: mocks.analyzeCourseContent,
 }))
 vi.mock('../../hooks/useAppConfig', () => ({
   useAppConfig: () => ({
@@ -848,5 +850,137 @@ describe('CourseFormPage', () => {
 
     expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeInTheDocument()
     expect(screen.queryByLabelText(/course title/i)).toBeNull()
+  })
+
+  it('auto-fills the form from a selected file and submits the suggestions', async () => {
+    const user = userEvent.setup()
+    mocks.analyzeCourseContent.mockResolvedValue({
+      title: 'Python Programming Basics',
+      description:
+        'Learn variables, loops and functions in Python. This beginner course covers coding fundamentals and simple algorithms.',
+      category: 'Science',
+      category_id: 3,
+      tags: ['python', 'programming', 'loops', 'functions', 'beginner'],
+      difficulty: 'beginner',
+      confidence: { title: 0.82, category: 0.91, difficulty: 0.74 },
+      processing_time_ms: 1250,
+      source: 'pdf',
+      word_count: 420,
+      warnings: [],
+    })
+    mocks.createCourse.mockResolvedValue({
+      ...OWNED_COURSE,
+      id: 42,
+      title: 'Python Programming Basics',
+      difficulty: 'beginner',
+      difficulty_display: 'Beginner',
+    })
+    mocks.fetchCourse.mockResolvedValue({
+      ...OWNED_COURSE,
+      id: 42,
+      title: 'Python Programming Basics',
+      difficulty: 'beginner',
+      difficulty_display: 'Beginner',
+    })
+    renderRoute('/courses/new')
+
+    await user.upload(
+      await screen.findByLabelText(/drag and drop/i),
+      new File(['%PDF-1.4'], 'python_basics.pdf', { type: 'application/pdf' }),
+    )
+
+    const autoFill = screen.getByRole('button', { name: /auto-fill with ai/i })
+    expect(autoFill).toBeEnabled()
+    await user.click(autoFill)
+
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      /suggestions applied from your pdf/i,
+    )
+    expect(mocks.analyzeCourseContent).toHaveBeenCalledWith({
+      file: expect.any(File),
+    })
+    expect(screen.getByLabelText(/course title/i)).toHaveValue(
+      'Python Programming Basics',
+    )
+    expect(screen.getByLabelText(/description/i)).toHaveValue(
+      'Learn variables, loops and functions in Python. This beginner course covers coding fundamentals and simple algorithms.',
+    )
+    expect(screen.getByLabelText(/category/i)).toHaveValue('3')
+    expect(screen.getByLabelText(/difficulty/i)).toHaveValue('beginner')
+    expect(screen.getByText('python')).toBeInTheDocument()
+    expect(screen.getByText('programming')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /publish course/i }))
+
+    await waitFor(() => expect(mocks.createCourse).toHaveBeenCalledTimes(1))
+    const [formData] = mocks.createCourse.mock.calls[0]
+    expect(formData.get('title')).toBe('Python Programming Basics')
+    expect(formData.get('category')).toBe('3')
+    expect(formData.get('difficulty')).toBe('beginner')
+    expect(formData.get('tags')).toContain('python')
+  })
+
+  it('auto-fills an existing course from its uploaded material', async () => {
+    const user = userEvent.setup()
+    mocks.fetchCourse.mockResolvedValue({
+      ...OWNED_COURSE,
+      difficulty: 'intermediate',
+      difficulty_display: 'Intermediate',
+    })
+    mocks.analyzeCourseContent.mockResolvedValue({
+      title: 'Updated title',
+      description: 'A concise summary of the existing course material.',
+      category: 'Science',
+      category_id: 3,
+      tags: ['science', 'research', 'methods', 'analysis', 'data'],
+      difficulty: 'advanced',
+      confidence: { title: 0.95, category: 0.8, difficulty: 0.7 },
+      processing_time_ms: 900,
+      source: 'transcript',
+      word_count: 120,
+      warnings: [],
+    })
+    renderRoute('/courses/1/edit')
+
+    await screen.findByDisplayValue('My course')
+    await user.click(screen.getByRole('button', { name: /auto-fill with ai/i }))
+
+    await waitFor(() =>
+      expect(mocks.analyzeCourseContent).toHaveBeenCalledWith({ courseId: '1' }),
+    )
+    expect(await screen.findByLabelText(/course title/i)).toHaveValue('Updated title')
+    expect(screen.getByLabelText(/difficulty/i)).toHaveValue('advanced')
+    expect(screen.getByRole('status')).toHaveTextContent(/course transcript/i)
+  })
+
+  it('shows an inline error when auto-fill fails', async () => {
+    const user = userEvent.setup()
+    mocks.analyzeCourseContent.mockRejectedValue({
+      isAxiosError: true,
+      response: {
+        status: 400,
+        data: {
+          error: {
+            code: 'invalid_file',
+            message: 'The audio track could not be extracted from this file.',
+            fields: {
+              file: ['The audio track could not be extracted from this file.'],
+            },
+          },
+        },
+      },
+    })
+    renderRoute('/courses/new')
+
+    await user.upload(
+      await screen.findByLabelText(/drag and drop/i),
+      new File(['%PDF-1.4'], 'broken.pdf', { type: 'application/pdf' }),
+    )
+    await user.click(screen.getByRole('button', { name: /auto-fill with ai/i }))
+
+    expect(
+      await screen.findByText(/audio track could not be extracted/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('status')).toBeNull()
   })
 })

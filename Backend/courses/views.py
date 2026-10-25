@@ -15,6 +15,11 @@ from rest_framework.response import Response
 
 from accounts.models import User
 
+from .content_analyzer import (
+    ContentAnalysisError,
+    analyze_course,
+    analyze_upload,
+)
 from .file_serving import build_course_file_response
 from .ml_recommendations import (
     DEFAULT_LIMIT,
@@ -27,6 +32,7 @@ from .permissions import CanManageCategory, CanManageCourse, CanManageEnrollment
 from .progress import get_or_create_progress, record_progress
 from .serializers import (
     CategorySerializer,
+    CourseContentAnalysisSerializer,
     CourseProgressSerializer,
     CourseProgressUpdateSerializer,
     CourseSerializer,
@@ -128,6 +134,19 @@ class CourseViewSet(viewsets.ModelViewSet):
         if category_slug:
             queryset = queryset.filter(category__slug=category_slug)
 
+        difficulty = self.request.query_params.get("difficulty")
+        if difficulty:
+            if difficulty not in Course.Difficulty.values:
+                raise serializers.ValidationError(
+                    {
+                        "difficulty": (
+                            "The difficulty must be “beginner”, "
+                            "“intermediate” or “advanced”."
+                        )
+                    }
+                )
+            queryset = queryset.filter(difficulty=difficulty)
+
         tags = self.request.query_params.get("tags")
         if tags:
             for tag in (item.strip() for item in tags.split(",")):
@@ -138,6 +157,41 @@ class CourseViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(owner=self.request.user)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="analyze-content",
+        url_name="analyze-content",
+    )
+    def analyze_content(self, request):
+        payload = CourseContentAnalysisSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+
+        upload = payload.validated_data.get("file")
+        course_id = payload.validated_data.get("course_id")
+
+        try:
+            if upload is not None:
+                result = analyze_upload(upload)
+            else:
+                course = Course.objects.filter(pk=course_id).first()
+                if course is None:
+                    raise NotFound("This course does not exist.")
+                if (
+                    request.user.role != User.Role.ADMIN
+                    and course.owner_id != request.user.id
+                ):
+                    raise PermissionDenied(
+                        "You can only analyze courses you own."
+                    )
+                result = analyze_course(course)
+        except ContentAnalysisError as error:
+            raise serializers.ValidationError(
+                {"file": [str(error)]}
+            ) from error
+
+        return Response(result)
 
     @action(detail=True, methods=["get"], url_path="file", url_name="file")
     def serve_file(self, request, pk=None):

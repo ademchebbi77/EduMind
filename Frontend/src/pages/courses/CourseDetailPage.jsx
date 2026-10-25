@@ -387,6 +387,12 @@ export default function CourseDetailPage() {
               </dd>
             </div>
             <div className="flex items-center justify-between gap-4 py-3">
+              <dt className="text-slate-500">Level</dt>
+              <dd className="text-right font-medium text-ink-soft">
+                {course.difficulty_display || course.difficulty || '—'}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-3">
               <dt className="inline-flex items-center gap-1.5 text-slate-500">
                 <Tags className="size-3.5" aria-hidden="true" />
                 Tags

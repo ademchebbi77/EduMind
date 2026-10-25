@@ -7,8 +7,10 @@ import {
   Lock,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react'
 import {
+  analyzeCourseContent,
   createCourse,
   fetchCategories,
   fetchCourse,
@@ -110,6 +112,7 @@ function fieldErrors(fields) {
     description: firstFieldError(fields, 'description'),
     category: firstFieldError(fields, 'category'),
     tags: firstFieldError(fields, 'tags'),
+    difficulty: firstFieldError(fields, 'difficulty'),
     thumbnail: firstFieldError(fields, 'thumbnail'),
     file: firstFieldError(fields, 'file'),
     video_url: firstFieldError(fields, 'video_url'),
@@ -122,6 +125,7 @@ const EMPTY_VALUES = {
   description: '',
   category: '',
   tags: [],
+  difficulty: '',
   videoUrl: '',
   maxStudents: '',
 }
@@ -155,6 +159,9 @@ export default function CourseFormPage() {
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState('')
+  const [analysisSummary, setAnalysisSummary] = useState('')
 
   const requestKey = `${courseId ?? 'new'}:${reload}`
 
@@ -188,6 +195,7 @@ export default function CourseFormPage() {
           description: payload.description || '',
           category: payload.category ? String(payload.category) : '',
           tags: Array.isArray(payload.tags) ? payload.tags : [],
+          difficulty: payload.difficulty || '',
           videoUrl: payload.video_url || '',
           maxStudents:
             payload.max_students !== null && payload.max_students !== undefined
@@ -240,12 +248,89 @@ export default function CourseFormPage() {
     }
     setSelectedFile(file)
     updatePreview(file)
+    setAnalysisError('')
+    setAnalysisSummary('')
     setErrors((current) => ({ ...current, file: undefined }))
   }
 
   function removeSelectedFile() {
     setSelectedFile(null)
     updatePreview(null)
+    setAnalysisError('')
+    setAnalysisSummary('')
+  }
+
+  async function handleAutoFill() {
+    if (!selectedFile && !isEdit) {
+      setAnalysisError('Select a course file before using auto-fill.')
+      return
+    }
+
+    setAnalyzing(true)
+    setAnalysisError('')
+    setAnalysisSummary('')
+
+    try {
+      const result = await analyzeCourseContent(
+        selectedFile ? { file: selectedFile } : { courseId },
+      )
+
+      setValues((current) => ({
+        ...current,
+        title: result.title || current.title,
+        description: result.description || current.description,
+        category: result.category_id ? String(result.category_id) : current.category,
+        tags:
+          Array.isArray(result.tags) && result.tags.length
+            ? result.tags
+            : current.tags,
+        difficulty: result.difficulty || current.difficulty,
+      }))
+      setErrors((current) => ({
+        ...current,
+        title: undefined,
+        description: undefined,
+        category: undefined,
+        tags: undefined,
+        difficulty: undefined,
+      }))
+
+      const sourceLabels = {
+        pdf: 'PDF',
+        docx: 'document',
+        audio: 'audio file',
+        video: 'video',
+        transcript: 'course transcript',
+        metadata: 'course details',
+      }
+      const source = sourceLabels[result.source] || 'file'
+      const categoryConfidence = result.confidence?.category
+      const seconds =
+        typeof result.processing_time_ms === 'number'
+          ? ` · ${(result.processing_time_ms / 1000).toFixed(1)} s`
+          : ''
+      const confidence = categoryConfidence
+        ? ` · ${Math.round(categoryConfidence * 100)}% category confidence`
+        : ''
+      const warnings = result.warnings?.length ? ` ${result.warnings.join(' ')}` : ''
+
+      setAnalysisSummary(
+        `Suggestions applied from your ${source}${confidence}${seconds}. Review the fields before saving.${warnings}`,
+      )
+      addToast({
+        type: 'success',
+        message: 'AI suggestions applied. Review the fields before saving.',
+      })
+    } catch (requestError) {
+      const error = normalizeApiError(requestError, 'Unable to analyze this file.')
+      setAnalysisError(
+        firstFieldError(error.fields, 'file') ||
+          error.message ||
+          'Unable to analyze this file.',
+      )
+    } finally {
+      setAnalyzing(false)
+    }
   }
 
   function handleThumbnailSelect(file) {
@@ -319,6 +404,7 @@ export default function CourseFormPage() {
     formData.append('video_url', values.videoUrl.trim())
     formData.append('tags', values.tags.join(', '))
     if (values.category) formData.append('category', values.category)
+    if (values.difficulty) formData.append('difficulty', values.difficulty)
     if (values.maxStudents !== '') {
       formData.append('max_students', String(Number(values.maxStudents)))
     }
@@ -328,6 +414,7 @@ export default function CourseFormPage() {
     const clearFields = {}
     if (isEdit) {
       if (!values.category && course?.category) clearFields.category = null
+      if (!values.difficulty && course?.difficulty) clearFields.difficulty = ''
       if (removeThumbnail && !thumbnailFile) clearFields.thumbnail = null
       if (
         values.maxStudents === '' &&
@@ -511,7 +598,55 @@ export default function CourseFormPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="space-y-6">
             <Card className="space-y-5">
-              <h2 className="text-xl font-semibold text-ink">Course details</h2>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-semibold text-ink">Course details</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Fill the fields manually, or let local AI draft them from your material.
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleAutoFill}
+                    loading={analyzing}
+                    disabled={saving || (!selectedFile && !isEdit)}
+                  >
+                    {!analyzing ? (
+                      <Sparkles className="size-4" aria-hidden="true" />
+                    ) : null}
+                    {analyzing ? 'Analyzing…' : 'Auto-fill with AI'}
+                  </Button>
+                  {!selectedFile && !isEdit ? (
+                    <span className="text-xs text-slate-500">
+                      Select a file to enable auto-fill.
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-500">
+                      Runs locally on the first pages or minutes.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {analysisError ? (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-clay/25 bg-clay/[0.06] px-4 py-3 text-sm font-medium text-clay"
+                >
+                  {analysisError}
+                </div>
+              ) : null}
+
+              {analysisSummary ? (
+                <div
+                  role="status"
+                  className="rounded-xl border border-sage/30 bg-sage/[0.07] px-4 py-3 text-sm leading-relaxed text-ink-soft"
+                >
+                  {analysisSummary}
+                </div>
+              ) : null}
 
               <Input
                 label="Course title"
@@ -554,20 +689,35 @@ export default function CourseFormPage() {
                   ))}
                 </Select>
 
-                <Input
-                  label="Maximum students"
-                  name="max_students"
-                  type="number"
-                  min="1"
-                  step="1"
-                  inputMode="numeric"
-                  value={values.maxStudents}
-                  onChange={(event) => updateField('maxStudents', event.target.value)}
-                  error={errors.max_students}
-                  hint="Optional. Leave empty for unlimited places."
+                <Select
+                  label="Difficulty"
+                  name="difficulty"
+                  value={values.difficulty}
+                  onChange={(event) => updateField('difficulty', event.target.value)}
+                  error={errors.difficulty}
+                  hint="Optional. Auto-fill estimates a level from the content."
                   disabled={saving}
-                />
+                >
+                  <option value="">Not specified</option>
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </Select>
               </div>
+
+              <Input
+                label="Maximum students"
+                name="max_students"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={values.maxStudents}
+                onChange={(event) => updateField('maxStudents', event.target.value)}
+                error={errors.max_students}
+                hint="Optional. Leave empty for unlimited places."
+                disabled={saving}
+              />
 
               <TagInput
                 label="Tags"

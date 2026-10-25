@@ -292,6 +292,20 @@ class CourseTranscriptRequestSerializer(serializers.Serializer):
     )
 
 
+class CourseContentAnalysisSerializer(serializers.Serializer):
+    file = serializers.FileField(required=False)
+    course_id = serializers.IntegerField(required=False, min_value=1)
+
+    def validate(self, attrs):
+        has_file = bool(attrs.get("file"))
+        has_course = bool(attrs.get("course_id"))
+        if has_file == has_course:
+            raise serializers.ValidationError(
+                "Provide either a file or a course_id, but not both."
+            )
+        return attrs
+
+
 class CourseProgressUpdateSerializer(serializers.Serializer):
     video_duration_seconds = serializers.IntegerField(min_value=0, required=False)
     video_watched_seconds = serializers.IntegerField(min_value=0, required=False)
@@ -328,6 +342,9 @@ class CourseSerializer(serializers.ModelSerializer):
     )
     type = serializers.CharField(read_only=True)
     type_display = serializers.CharField(source="get_type_display", read_only=True)
+    difficulty_display = serializers.CharField(
+        source="get_difficulty_display", read_only=True
+    )
     owner_name = serializers.CharField(source="owner.full_name", read_only=True)
     category = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(),
@@ -369,6 +386,8 @@ class CourseSerializer(serializers.ModelSerializer):
             "category_name",
             "category_slug",
             "tags",
+            "difficulty",
+            "difficulty_display",
             "owner",
             "owner_name",
             "max_students",
