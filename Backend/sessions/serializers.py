@@ -77,10 +77,7 @@ class LiveSessionSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"ends_at": "La date de fin doit être après la date de début."}
                 )
-            if self.instance is None and starts_at < timezone.now():
-                raise serializers.ValidationError(
-                    {"starts_at": "La date de début ne peut pas être dans le passé."}
-                )
+            # On ne bloque pas les dates passées pour permettre la création de sessions rétroactives
 
         # Un teacher ne peut créer que des sessions de type "course"
         request = self.context.get("request")
