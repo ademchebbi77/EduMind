@@ -22,6 +22,7 @@ urlpatterns = [
     path("api/sessions/", include("sessions.urls")),
     path("api/enrollments/", include("sessions.enrollment_urls")),
     path("api/announcements/", include("announcements.urls")),
+    path("api/announcement-enrollments/", include("announcements.enrollment_urls")),
     path("api/config/", ApiConfigView.as_view(), name="api-config"),
     re_path(r"^api(?:/.*)?$", api_not_found),
 ]

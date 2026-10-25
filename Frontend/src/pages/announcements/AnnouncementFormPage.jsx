@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, FileQuestion, RotateCcw } from 'lucide-react'
+import { ArrowLeft, CalendarDays, FileQuestion, Link2, RotateCcw } from 'lucide-react'
 import { createAnnouncement, fetchAnnouncement, updateAnnouncement } from '../../api/announcements'
 import { fetchSessions } from '../../api/sessions'
 import { useAuth } from '../../context/AuthContext'
@@ -20,22 +20,25 @@ export default function AnnouncementFormPage() {
   const { user } = useAuth()
   const { addToast } = useToast()
 
-  useDocumentTitle(isEdit ? 'Modifier l\'annonce' : 'Nouvelle annonce')
+  useDocumentTitle(isEdit ? "Modifier l'annonce" : 'Nouvelle annonce')
 
-  const [reload, setReload]     = useState(0)
+  const [reload, setReload]           = useState(0)
   const [fetchResult, setFetchResult] = useState({ key: null, announcement: null, error: null })
-  const [sessions, setSessions] = useState([])
+  const [sessions, setSessions]       = useState([])
 
   const [values, setValues] = useState({
-    title: '',
-    content: '',
+    title:           '',
+    content:         '',
     target_audience: 'all',
     related_session: '',
-    is_pinned: false,
+    is_pinned:       false,
+    event_date:      '',   // YYYY-MM-DD
+    event_time:      '',   // HH:MM
+    event_link:      '',   // URL Meet/Zoom/Teams
   })
-  const [errors, setErrors]     = useState({})
+  const [errors, setErrors]       = useState({})
   const [formError, setFormError] = useState('')
-  const [saving, setSaving]     = useState(false)
+  const [saving, setSaving]       = useState(false)
 
   const requestKey = `${announcementId ?? 'new'}:${reload}`
 
@@ -54,11 +57,14 @@ export default function AnnouncementFormPage() {
       .then((payload) => {
         setFetchResult({ key: requestKey, announcement: payload, error: null })
         setValues({
-          title:            payload.title,
-          content:          payload.content,
-          target_audience:  payload.target_audience,
-          related_session:  payload.related_session || '',
-          is_pinned:        payload.is_pinned,
+          title:           payload.title,
+          content:         payload.content,
+          target_audience: payload.target_audience,
+          related_session: payload.related_session || '',
+          is_pinned:       payload.is_pinned,
+          event_date:      payload.event_date || '',
+          event_time:      payload.event_time || '',
+          event_link:      payload.meeting_link || '',
         })
       })
       .catch((err) => {
@@ -73,12 +79,36 @@ export default function AnnouncementFormPage() {
     setErrors((e) => ({ ...e, [name]: undefined }))
   }
 
+  // Quand on sélectionne une session liée, auto-remplir date/heure/lien
+  function handleSessionChange(sessionId) {
+    updateField('related_session', sessionId)
+    if (!sessionId) return
+    const session = sessions.find((s) => String(s.id) === String(sessionId))
+    if (!session) return
+    if (session.starts_at) {
+      const d = new Date(session.starts_at)
+      const pad = (n) => String(n).padStart(2, '0')
+      updateField('event_date', `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`)
+      updateField('event_time', `${pad(d.getHours())}:${pad(d.getMinutes())}`)
+    }
+    if (session.meeting_link) {
+      updateField('event_link', session.meeting_link)
+    }
+  }
+
   function validate() {
     const e = {}
     if (!values.title.trim())   e.title   = 'Le titre est requis.'
     if (!values.content.trim()) e.content = 'Le contenu est requis.'
+    if (values.event_link && !/^https?:\/\/.+/.test(values.event_link.trim())) {
+      e.event_link = 'Le lien doit commencer par http:// ou https://'
+    }
     setErrors(e)
     return Object.keys(e).length === 0
+  }
+
+  function buildContent() {
+    return values.content.trim()
   }
 
   async function handleSubmit(e) {
@@ -89,10 +119,13 @@ export default function AnnouncementFormPage() {
     setSaving(true)
     const payload = {
       title:           values.title.trim(),
-      content:         values.content.trim(),
+      content:         buildContent(),
       target_audience: values.target_audience,
       related_session: values.related_session || null,
       is_pinned:       values.is_pinned,
+      event_date:      values.event_date || null,
+      event_time:      values.event_time || null,
+      meeting_link:    values.event_link.trim() || '',
     }
 
     try {
@@ -113,7 +146,9 @@ export default function AnnouncementFormPage() {
       }
       setErrors(fieldErrs)
       if (!Object.values(fieldErrs).some(Boolean)) {
-        setFormError(firstFieldError(error.fields, 'non_field_errors') || error.message || 'Enregistrement échoué.')
+        setFormError(
+          firstFieldError(error.fields, 'non_field_errors') || error.message || 'Enregistrement échoué.'
+        )
       }
     } finally {
       setSaving(false)
@@ -132,16 +167,29 @@ export default function AnnouncementFormPage() {
           <ArrowLeft className="size-4" /> Retour aux annonces
         </Link>
         <div role="alert">
-          <EmptyState icon={FileQuestion} title="Annonce introuvable" description={loadError.message}
-            action={<Button variant="secondary" onClick={() => setReload((c) => c + 1)}><RotateCcw className="size-4" /> Réessayer</Button>} />
+          <EmptyState
+            icon={FileQuestion}
+            title="Annonce introuvable"
+            description={loadError.message}
+            action={
+              <Button variant="secondary" onClick={() => setReload((c) => c + 1)}>
+                <RotateCcw className="size-4" /> Réessayer
+              </Button>
+            }
+          />
         </div>
       </div>
     )
   }
 
+  const hasEventInfo = values.event_date || values.event_time || values.event_link
+
   return (
     <div className="space-y-6">
-      <Link to="/announcements" className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-brand-strong">
+      <Link
+        to="/announcements"
+        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-brand-strong"
+      >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Retour aux annonces
       </Link>
@@ -164,7 +212,9 @@ export default function AnnouncementFormPage() {
 
       <form onSubmit={handleSubmit} noValidate aria-busy={saving || undefined}>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          {/* Colonne principale */}
           <div className="space-y-6">
+            {/* Contenu */}
             <Card className="space-y-5">
               <h2 className="text-xl font-semibold text-ink">Contenu de l'annonce</h2>
 
@@ -182,7 +232,7 @@ export default function AnnouncementFormPage() {
               <Textarea
                 label="Contenu"
                 name="content"
-                rows={8}
+                rows={6}
                 value={values.content}
                 onChange={(e) => updateField('content', e.target.value)}
                 error={errors.content}
@@ -191,8 +241,82 @@ export default function AnnouncementFormPage() {
                 required
               />
             </Card>
+
+            {/* Détails de l'événement */}
+            <Card className="space-y-5">
+              <div>
+                <h2 className="text-xl font-semibold text-ink">
+                  <CalendarDays className="mr-2 inline size-5 text-brand-strong" aria-hidden="true" />
+                  Détails de l'événement
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Optionnel — ces informations seront affichées dans l'annonce.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Date"
+                  name="event_date"
+                  type="date"
+                  value={values.event_date}
+                  onChange={(e) => updateField('event_date', e.target.value)}
+                  disabled={saving}
+                />
+                <Input
+                  label="Heure"
+                  name="event_time"
+                  type="time"
+                  value={values.event_time}
+                  onChange={(e) => updateField('event_time', e.target.value)}
+                  disabled={saving}
+                />
+              </div>
+
+              <Input
+                label="Lien de réunion (Meet, Zoom, Teams…)"
+                name="event_link"
+                type="url"
+                placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                value={values.event_link}
+                onChange={(e) => updateField('event_link', e.target.value)}
+                error={errors.event_link}
+                hint="Lien Google Meet, Zoom, Microsoft Teams, etc."
+                disabled={saving}
+              />
+
+              {/* Aperçu */}
+              {hasEventInfo && (
+                <div className="rounded-xl border border-brand/20 bg-brand/[0.04] px-4 py-3 text-sm text-slate-700">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-brand-strong">
+                    Aperçu dans l'annonce
+                  </p>
+                  {values.event_date && (
+                    <p>📅 Date : <strong>{values.event_date}</strong></p>
+                  )}
+                  {values.event_time && (
+                    <p>🕐 Heure : <strong>{values.event_time}</strong></p>
+                  )}
+                  {values.event_link && (
+                    <p className="flex items-center gap-1">
+                      🔗 Lien :
+                      <a
+                        href={values.event_link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-1 truncate font-medium text-brand-strong hover:underline"
+                      >
+                        {values.event_link}
+                        <Link2 className="ml-1 inline size-3" aria-hidden="true" />
+                      </a>
+                    </p>
+                  )}
+                </div>
+              )}
+            </Card>
           </div>
 
+          {/* Colonne latérale */}
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
             <Card className="space-y-5">
               <h2 className="text-xl font-semibold text-ink">Paramètres</h2>
@@ -214,8 +338,9 @@ export default function AnnouncementFormPage() {
                   label="Session liée (optionnel)"
                   name="related_session"
                   value={values.related_session}
-                  onChange={(e) => updateField('related_session', e.target.value)}
+                  onChange={(e) => handleSessionChange(e.target.value)}
                   disabled={saving}
+                  hint="Sélectionner une session remplit automatiquement la date, l'heure et le lien."
                 >
                   <option value="">Aucune session liée</option>
                   {sessions.map((s) => (
@@ -244,7 +369,7 @@ export default function AnnouncementFormPage() {
               <h2 className="text-xl font-semibold text-ink">Publier</h2>
               <div className="mt-5 space-y-3">
                 <Button type="submit" loading={saving} className="w-full">
-                  {saving ? 'Enregistrement…' : isEdit ? 'Sauvegarder' : 'Publier l\'annonce'}
+                  {saving ? 'Enregistrement…' : isEdit ? 'Sauvegarder' : "Publier l'annonce"}
                 </Button>
                 <LinkButton to="/announcements" variant="secondary" className="w-full">
                   Annuler

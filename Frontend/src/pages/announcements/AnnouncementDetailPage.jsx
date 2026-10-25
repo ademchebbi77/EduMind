@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, CalendarDays, FileQuestion, Megaphone,
-  Pencil, Pin, RotateCcw, Trash2,
+  ArrowLeft, CalendarDays, Clock, ExternalLink, FileQuestion,
+  Megaphone, Pencil, Pin, RotateCcw, Trash2, Users,
 } from 'lucide-react'
-import { fetchAnnouncement, deleteAnnouncement } from '../../api/announcements'
+import { fetchAnnouncement, deleteAnnouncement, enrollInAnnouncement } from '../../api/announcements'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
@@ -38,12 +38,19 @@ export default function AnnouncementDetailPage() {
   const { user } = useAuth()
   const { addToast } = useToast()
 
-  const [reload, setReload]     = useState(0)
-  const [loading, setLoading]   = useState(true)
+  const [reload, setReload]         = useState(0)
+  const [loading, setLoading]       = useState(true)
   const [announcement, setAnnouncement] = useState(null)
-  const [error, setError]       = useState(null)
+  const [error, setError]           = useState(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
+  const [deleting, setDeleting]     = useState(false)
+
+  // Inscription
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false)
+  const [enrollForm, setEnrollForm] = useState({ full_name: '', email: '', phone: '', message: '' })
+  const [enrollErrors, setEnrollErrors] = useState({})
+  const [enrolling, setEnrolling]     = useState(false)
+  const [isEnrolled, setIsEnrolled]   = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -62,6 +69,17 @@ export default function AnnouncementDetailPage() {
     return () => controller.abort()
   }, [announcementId, reload])
 
+  // Pré-remplir le formulaire avec les infos de l'utilisateur connecté
+  useEffect(() => {
+    if (user) {
+      setEnrollForm((f) => ({
+        ...f,
+        full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        email:     user.email || '',
+      }))
+    }
+  }, [user])
+
   useDocumentTitle(announcement?.title || 'Annonce')
 
   async function handleDelete() {
@@ -77,9 +95,40 @@ export default function AnnouncementDetailPage() {
     }
   }
 
+  async function handleEnroll() {
+    // Validation
+    const errs = {}
+    if (!enrollForm.full_name.trim()) errs.full_name = 'Le nom est requis.'
+    if (!enrollForm.email.trim())     errs.email     = 'L\'email est requis.'
+    if (Object.keys(errs).length > 0) { setEnrollErrors(errs); return }
+
+    setEnrolling(true)
+    try {
+      await enrollInAnnouncement(announcement.id, {
+        full_name: enrollForm.full_name.trim(),
+        email:     enrollForm.email.trim(),
+        phone:     enrollForm.phone.trim(),
+        message:   enrollForm.message.trim(),
+      })
+      addToast({ type: 'success', message: 'Inscription envoyée. En attente de confirmation.' })
+      setEnrollModalOpen(false)
+      setIsEnrolled(true)
+    } catch (err) {
+      addToast({ type: 'error', message: normalizeApiError(err, 'Inscription échouée.').message })
+    } finally {
+      setEnrolling(false)
+    }
+  }
+
   const canEdit =
     user?.role === 'admin' ||
     (user?.role === 'teacher' && announcement?.author === user?.id)
+
+  const isStudent      = user?.role === 'student'
+  const hasRelatedSession = !!announcement?.related_session
+  const hasEventInfo   = !!(announcement?.event_date || announcement?.event_time || announcement?.meeting_link)
+  // Le bouton d'inscription s'affiche si l'annonce a des infos d'événement OU une session liée
+  const showEnrollBtn  = isStudent && (hasEventInfo || hasRelatedSession) && !isEnrolled
 
   if (loading) return <PageLoader label="Chargement de l'annonce…" />
 
@@ -152,35 +201,127 @@ export default function AnnouncementDetailPage() {
             </div>
           </div>
 
-          {canEdit && (
-            <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
-              <LinkButton to={`/announcements/${announcement.id}/edit`} variant="secondary" size="sm">
-                <Pencil className="size-4" aria-hidden="true" />
-                Modifier
-              </LinkButton>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setDeleteOpen(true)}
-                className="text-clay hover:bg-clay/10"
+          {/* Actions */}
+          <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
+
+            {/* Bouton S'inscrire */}
+            {showEnrollBtn && (
+              <button
+                type="button"
+                onClick={() => setEnrollModalOpen(true)}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
               >
-                <Trash2 className="size-4" aria-hidden="true" />
-                Supprimer
-              </Button>
-            </div>
-          )}
+                <Users className="size-4" aria-hidden="true" />
+                S'inscrire à la formation
+              </button>
+            )}
+
+            {isStudent && isEnrolled && (
+              <span className="inline-flex items-center gap-2 rounded-xl bg-sage/10 px-4 py-2 text-sm font-semibold text-sage">
+                ✓ Inscrit — en attente de confirmation
+              </span>
+            )}
+
+            {/* Lien rejoindre */}
+            {announcement.meeting_link && (
+              <a
+                href={announcement.meeting_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-line bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:border-slate-300 hover:bg-mist"
+              >
+                <ExternalLink className="size-4" aria-hidden="true" />
+                Rejoindre la réunion
+              </a>
+            )}
+
+            {canEdit && (
+              <>
+                <LinkButton to={`/announcements/${announcement.id}/edit`} variant="secondary" size="sm">
+                  <Pencil className="size-4" aria-hidden="true" />
+                  Modifier
+                </LinkButton>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDeleteOpen(true)}
+                  className="text-clay hover:bg-clay/10"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  Supprimer
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Contenu */}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* Contenu */}
         <Card>
           <h2 className="mb-4 text-xl font-semibold text-ink">Contenu</h2>
-          <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap leading-relaxed">
-            {announcement.content}
+          <div className="text-sm leading-relaxed text-slate-700">
+            <p className="whitespace-pre-wrap">{announcement.content}</p>
+
+            {/* Bloc infos événement */}
+            {(announcement.event_date || announcement.event_time || announcement.meeting_link) && (
+              <div className="mt-5 space-y-2.5 rounded-xl border border-brand/20 bg-brand/[0.04] px-4 py-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-brand-strong">
+                  Informations de l'événement
+                </p>
+                {announcement.event_date && (
+                  <p className="flex items-center gap-2">
+                    <CalendarDays className="size-4 shrink-0 text-brand-strong" aria-hidden="true" />
+                    <span>
+                      <span className="font-medium">Date :</span> {announcement.event_date}
+                      {announcement.event_time && (
+                        <span className="ml-2 font-medium">à {announcement.event_time}</span>
+                      )}
+                    </span>
+                  </p>
+                )}
+                {!announcement.event_date && announcement.event_time && (
+                  <p className="flex items-center gap-2">
+                    <Clock className="size-4 shrink-0 text-brand-strong" aria-hidden="true" />
+                    <span><span className="font-medium">Heure :</span> {announcement.event_time}</span>
+                  </p>
+                )}
+                {announcement.meeting_link && (
+                  <p className="flex items-center gap-2">
+                    <ExternalLink className="size-4 shrink-0 text-brand-strong" aria-hidden="true" />
+                    <a
+                      href={announcement.meeting_link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-brand-strong hover:underline break-all"
+                    >
+                      Rejoindre la réunion →
+                    </a>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Bouton S'inscrire dans le contenu */}
+            {showEnrollBtn && (
+              <div className="mt-5">
+                <button
+                  type="button"
+                  onClick={() => setEnrollModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-clay px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+                >
+                  <Users className="size-4" aria-hidden="true" />
+                  S'inscrire à cette formation
+                </button>
+              </div>
+            )}
+            {isStudent && isEnrolled && (
+              <p className="mt-4 text-sm font-medium text-sage">✓ Vous êtes inscrit — en attente de confirmation.</p>
+            )}
           </div>
         </Card>
 
+        {/* Détails */}
         <Card as="aside" className="bg-gradient-to-b from-white to-mist/50">
           <h2 className="mb-4 text-xl font-semibold text-ink">Détails</h2>
           <dl className="divide-y divide-line text-sm">
@@ -216,8 +357,24 @@ export default function AnnouncementDetailPage() {
             )}
           </dl>
 
-          {announcement.related_session && (
+          {/* Bouton dans le panneau latéral */}
+          {showEnrollBtn && (
             <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setEnrollModalOpen(true)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-clay px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                <Users className="size-4" aria-hidden="true" />
+                S'inscrire à la formation
+              </button>
+            </div>
+          )}
+          {isStudent && isEnrolled && (
+            <p className="mt-4 text-center text-sm font-medium text-sage">✓ Inscrit</p>
+          )}
+          {announcement.related_session && (
+            <div className="mt-3">
               <LinkButton to={`/sessions/${announcement.related_session}`} variant="secondary" size="sm" className="w-full">
                 Voir la session liée
               </LinkButton>
@@ -225,6 +382,93 @@ export default function AnnouncementDetailPage() {
           )}
         </Card>
       </div>
+
+      {/* Modal inscription */}
+      <Modal
+        open={enrollModalOpen}
+        onClose={() => { setEnrollModalOpen(false); setEnrollErrors({}) }}
+        title="S'inscrire à la formation"
+        description={`Remplissez le formulaire pour vous inscrire à "${announcement.title}".`}
+        size="md"
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => { setEnrollModalOpen(false); setEnrollErrors({}) }} disabled={enrolling}>
+              Annuler
+            </Button>
+            <Button onClick={handleEnroll} disabled={enrolling}>
+              {enrolling ? 'Envoi…' : 'Envoyer ma demande'}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {/* Nom complet */}
+          <div className="space-y-1.5">
+            <label htmlFor="enroll-name" className="block text-sm font-medium text-ink">
+              Nom complet <span className="text-clay">*</span>
+            </label>
+            <input
+              id="enroll-name"
+              type="text"
+              value={enrollForm.full_name}
+              onChange={(e) => { setEnrollForm((f) => ({ ...f, full_name: e.target.value })); setEnrollErrors((e2) => ({ ...e2, full_name: undefined })) }}
+              placeholder="Votre nom et prénom"
+              className="w-full rounded-xl border border-line bg-paper px-4 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              disabled={enrolling}
+            />
+            {enrollErrors.full_name && <p className="text-xs text-clay">{enrollErrors.full_name}</p>}
+          </div>
+
+          {/* Email */}
+          <div className="space-y-1.5">
+            <label htmlFor="enroll-email" className="block text-sm font-medium text-ink">
+              Email <span className="text-clay">*</span>
+            </label>
+            <input
+              id="enroll-email"
+              type="email"
+              value={enrollForm.email}
+              onChange={(e) => { setEnrollForm((f) => ({ ...f, email: e.target.value })); setEnrollErrors((e2) => ({ ...e2, email: undefined })) }}
+              placeholder="votre@email.com"
+              className="w-full rounded-xl border border-line bg-paper px-4 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              disabled={enrolling}
+            />
+            {enrollErrors.email && <p className="text-xs text-clay">{enrollErrors.email}</p>}
+          </div>
+
+          {/* Téléphone */}
+          <div className="space-y-1.5">
+            <label htmlFor="enroll-phone" className="block text-sm font-medium text-ink">
+              Téléphone <span className="text-xs text-slate-400">(optionnel)</span>
+            </label>
+            <input
+              id="enroll-phone"
+              type="tel"
+              value={enrollForm.phone}
+              onChange={(e) => setEnrollForm((f) => ({ ...f, phone: e.target.value }))}
+              placeholder="+213 6XX XXX XXX"
+              className="w-full rounded-xl border border-line bg-paper px-4 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              disabled={enrolling}
+            />
+          </div>
+
+          {/* Message */}
+          <div className="space-y-1.5">
+            <label htmlFor="enroll-msg" className="block text-sm font-medium text-ink">
+              Message / Motivation <span className="text-xs text-slate-400">(optionnel)</span>
+            </label>
+            <textarea
+              id="enroll-msg"
+              rows={3}
+              value={enrollForm.message}
+              onChange={(e) => setEnrollForm((f) => ({ ...f, message: e.target.value }))}
+              placeholder="Pourquoi souhaitez-vous participer à cette formation ?"
+              className="w-full rounded-xl border border-line bg-paper px-4 py-2.5 text-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+              disabled={enrolling}
+            />
+          </div>
+        </div>
+      </Modal>
 
       {/* Modal suppression */}
       <Modal

@@ -53,9 +53,28 @@ export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
         </p>
       </div>
 
-      {announcement.related_session_title && (
-        <div className="rounded-lg bg-mist px-3 py-2 text-xs text-slate-600">
-          📅 Session liée : <span className="font-medium">{announcement.related_session_title}</span>
+      {(announcement.related_session_title || announcement.event_date || announcement.meeting_link) && (
+        <div className="rounded-lg bg-mist px-3 py-2 text-xs text-slate-600 space-y-1">
+          {announcement.related_session_title && (
+            <p>📅 Session liée : <span className="font-medium">{announcement.related_session_title}</span></p>
+          )}
+          {announcement.event_date && (
+            <p>📅 <span className="font-medium">{announcement.event_date}{announcement.event_time ? ` à ${announcement.event_time}` : ''}</span></p>
+          )}
+          {announcement.meeting_link && (
+            <p>
+              🔗{' '}
+              <a
+                href={announcement.meeting_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-brand-strong hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                Rejoindre la réunion
+              </a>
+            </p>
+          )}
         </div>
       )}
 

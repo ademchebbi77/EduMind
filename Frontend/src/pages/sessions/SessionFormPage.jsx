@@ -35,8 +35,11 @@ export default function SessionFormPage() {
     session_type: isTeacher ? 'course' : 'training',
     status: 'scheduled',
     meeting_link: '',
-    starts_at: '',
-    ends_at: '',
+    date: '',        // YYYY-MM-DD
+    start_time: '',  // HH:MM
+    duration: '2',   // heures (nombre)
+    starts_at: '',   // calculé
+    ends_at: '',     // calculé
     assigned_teachers: [],
   })
   const [errors, setErrors]     = useState({})
@@ -66,6 +69,9 @@ export default function SessionFormPage() {
           session_type:       payload.session_type,
           status:             payload.status,
           meeting_link:       payload.meeting_link || '',
+          date:               toDateInput(payload.starts_at),
+          start_time:         toTimeInput(payload.starts_at),
+          duration:           String(Math.round((new Date(payload.ends_at) - new Date(payload.starts_at)) / 3600000) || 2),
           starts_at:          toLocalDateTimeInput(payload.starts_at),
           ends_at:            toLocalDateTimeInput(payload.ends_at),
           assigned_teachers:  payload.assigned_teachers || [],
@@ -85,6 +91,46 @@ export default function SessionFormPage() {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
   }
 
+  function toDateInput(isoString) {
+    if (!isoString) return ''
+    const d = new Date(isoString)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+
+  function toTimeInput(isoString) {
+    if (!isoString) return ''
+    const d = new Date(isoString)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  // Recalcule starts_at et ends_at à partir de date + start_time + duration
+  function computeDateTimes(date, start_time, duration) {
+    if (!date || !start_time) return { starts_at: '', ends_at: '' }
+    const starts = new Date(`${date}T${start_time}:00`)
+    if (isNaN(starts.getTime())) return { starts_at: '', ends_at: '' }
+    const pad = (n) => String(n).padStart(2, '0')
+    const fmt = (d) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    const durationHours = parseFloat(duration) || 1
+    const ends = new Date(starts.getTime() + durationHours * 3600 * 1000)
+    return { starts_at: fmt(starts), ends_at: fmt(ends) }
+  }
+
+  function updateDateField(name, value) {
+    setValues((v) => {
+      const next = { ...v, [name]: value }
+      const { starts_at, ends_at } = computeDateTimes(
+        name === 'date'       ? value : v.date,
+        name === 'start_time' ? value : v.start_time,
+        name === 'duration'   ? value : v.duration,
+      )
+      return { ...next, starts_at, ends_at }
+    })
+    setErrors((e) => ({ ...e, starts_at: undefined, ends_at: undefined }))
+  }
+
   function updateField(name, value) {
     setValues((v) => ({ ...v, [name]: value }))
     setErrors((e) => ({ ...e, [name]: undefined }))
@@ -101,11 +147,13 @@ export default function SessionFormPage() {
 
   function validate() {
     const e = {}
-    if (!values.title.trim())      e.title      = 'Le titre est requis.'
-    if (!values.starts_at)         e.starts_at  = 'La date de début est requise.'
-    if (!values.ends_at)           e.ends_at    = 'La date de fin est requise.'
-    if (values.starts_at && values.ends_at && values.ends_at <= values.starts_at)
-      e.ends_at = 'La fin doit être après le début.'
+    if (!values.title.trim()) e.title      = 'Le titre est requis.'
+    if (!values.date)         e.starts_at  = 'La date est requise.'
+    if (!values.start_time)   e.starts_at  = 'L\'heure de début est requise.'
+    if (!values.duration || parseFloat(values.duration) <= 0)
+      e.ends_at = 'La durée doit être supérieure à 0.'
+    if (!values.starts_at || !values.ends_at)
+      e.starts_at = 'Veuillez renseigner la date et l\'heure.'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -267,28 +315,73 @@ export default function SessionFormPage() {
                 Date et heure
               </h2>
 
+              {/* Date */}
+              <Input
+                label="Date"
+                name="date"
+                type="date"
+                value={values.date}
+                onChange={(e) => updateDateField('date', e.target.value)}
+                error={errors.starts_at}
+                disabled={saving}
+                required
+              />
+
               <div className="grid gap-4 sm:grid-cols-2">
+                {/* Heure de début */}
                 <Input
-                  label="Début"
-                  name="starts_at"
-                  type="datetime-local"
-                  value={values.starts_at}
-                  onChange={(e) => updateField('starts_at', e.target.value)}
-                  error={errors.starts_at}
+                  label="Heure de début"
+                  name="start_time"
+                  type="time"
+                  value={values.start_time}
+                  onChange={(e) => updateDateField('start_time', e.target.value)}
                   disabled={saving}
                   required
                 />
-                <Input
-                  label="Fin"
-                  name="ends_at"
-                  type="datetime-local"
-                  value={values.ends_at}
-                  onChange={(e) => updateField('ends_at', e.target.value)}
-                  error={errors.ends_at}
-                  disabled={saving}
-                  required
-                />
+
+                {/* Durée */}
+                <div className="space-y-1.5">
+                  <label htmlFor="duration" className="block text-sm font-medium text-ink">
+                    Durée <span className="text-clay">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="duration"
+                      type="number"
+                      min="0.5"
+                      max="24"
+                      step="0.5"
+                      value={values.duration}
+                      onChange={(e) => updateDateField('duration', e.target.value)}
+                      disabled={saving}
+                      className="w-full rounded-xl border border-line bg-white px-4 py-2.5 pr-16 text-sm shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                    />
+                    <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-slate-400">
+                      heure{parseFloat(values.duration) > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                </div>
               </div>
+
+              {/* Récap heure de fin calculée */}
+              {values.starts_at && values.ends_at && (
+                <div className="rounded-xl border border-brand/20 bg-brand/[0.04] px-4 py-3 text-sm text-slate-700">
+                  <p className="font-medium text-brand-strong mb-1">Récapitulatif</p>
+                  <p>
+                    Début : <strong>{new Date(values.starts_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</strong>
+                  </p>
+                  <p>
+                    Fin : <strong>{new Date(values.ends_at).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}</strong>
+                  </p>
+                  <p>
+                    Durée : <strong>{values.duration} heure{parseFloat(values.duration) > 1 ? 's' : ''}</strong>
+                  </p>
+                </div>
+              )}
+
+              {errors.ends_at && (
+                <p className="text-xs font-medium text-clay">{errors.ends_at}</p>
+              )}
             </Card>
 
             {/* Teachers assignés (formations admin uniquement) */}
