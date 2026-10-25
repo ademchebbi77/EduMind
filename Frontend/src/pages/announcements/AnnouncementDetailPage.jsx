@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, CalendarDays, Clock, ExternalLink, FileQuestion,
+  ArrowLeft, CalendarDays, Clock, ExternalLink, FileQuestion, Gauge,
   Megaphone, Pencil, Pin, RotateCcw, Trash2, Users,
 } from 'lucide-react'
 import { fetchAnnouncement, deleteAnnouncement, enrollInAnnouncement } from '../../api/announcements'
@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
 import { formatDate } from '../../lib/format'
-import { urgencyBadge } from '../../lib/urgency'
+import { urgencyBadge, urgencyScore } from '../../lib/urgency'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
@@ -114,6 +114,18 @@ export default function AnnouncementDetailPage() {
       addToast({ type: 'success', message: 'Inscription envoyée. En attente de confirmation.' })
       setEnrollModalOpen(false)
       setIsEnrolled(true)
+      setAnnouncement((current) =>
+        current
+          ? {
+              ...current,
+              seats_taken: (current.seats_taken ?? 0) + 1,
+              seats_remaining:
+                current.seats_remaining == null
+                  ? null
+                  : Math.max(0, current.seats_remaining - 1),
+            }
+          : current,
+      )
     } catch (err) {
       addToast({ type: 'error', message: normalizeApiError(err, 'Inscription échouée.').message })
     } finally {
@@ -128,8 +140,9 @@ export default function AnnouncementDetailPage() {
   const isStudent      = user?.role === 'student'
   const hasRelatedSession = !!announcement?.related_session
   const hasEventInfo   = !!(announcement?.event_date || announcement?.event_time || announcement?.meeting_link)
+  const isFull         = announcement?.seats_remaining === 0
   // Le bouton d'inscription s'affiche si l'annonce a des infos d'événement OU une session liée
-  const showEnrollBtn  = isStudent && (hasEventInfo || hasRelatedSession) && !isEnrolled
+  const showEnrollBtn  = isStudent && (hasEventInfo || hasRelatedSession) && !isEnrolled && !isFull
 
   if (loading) return <PageLoader label="Chargement de l'annonce…" />
 
@@ -166,6 +179,7 @@ export default function AnnouncementDetailPage() {
   if (!announcement) return null
 
   const urgency = urgencyBadge(announcement.urgency)
+  const score = urgencyScore(announcement.urgency)
 
   return (
     <div className="space-y-6">
@@ -193,6 +207,7 @@ export default function AnnouncementDetailPage() {
                   <Badge variant={urgency.variant}>{urgency.label}</Badge>
                 </span>
               )}
+              {isFull && <Badge variant="clay">Complet</Badge>}
             </div>
 
             <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
@@ -206,6 +221,15 @@ export default function AnnouncementDetailPage() {
                 <CalendarDays className="size-4" aria-hidden="true" />
                 {formatDate(announcement.created_at)}
               </span>
+              {score && (
+                <span
+                  className="inline-flex items-center gap-1.5 font-medium text-ink-soft"
+                  title={score.title}
+                >
+                  <Gauge className="size-4" aria-hidden="true" />
+                  {score.text} · {announcement.urgency.label}
+                </span>
+              )}
             </div>
           </div>
 
@@ -326,6 +350,11 @@ export default function AnnouncementDetailPage() {
             {isStudent && isEnrolled && (
               <p className="mt-4 text-sm font-medium text-sage">✓ Vous êtes inscrit — en attente de confirmation.</p>
             )}
+            {isStudent && !isEnrolled && isFull && (
+              <p className="mt-4 text-sm font-medium text-clay">
+                Complet — plus aucune place disponible pour cette formation.
+              </p>
+            )}
           </div>
         </Card>
 
@@ -353,6 +382,17 @@ export default function AnnouncementDetailPage() {
               <div className="flex items-center justify-between gap-4 py-3">
                 <dt className="text-slate-500">Épinglée</dt>
                 <dd className="font-medium text-gold">Oui</dd>
+              </div>
+            )}
+            {announcement.capacity != null && (
+              <div className="flex items-center justify-between gap-4 py-3">
+                <dt className="text-slate-500">Places</dt>
+                <dd
+                  className={`font-medium ${isFull ? 'text-clay' : 'text-ink-soft'}`}
+                >
+                  {announcement.seats_taken ?? 0} / {announcement.capacity}
+                  {isFull && ' — complet'}
+                </dd>
               </div>
             )}
             {announcement.related_session_title && (

@@ -14,6 +14,8 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         source="related_session.title", read_only=True, default=None
     )
     enrollment_count = serializers.SerializerMethodField()
+    seats_taken      = serializers.SerializerMethodField()
+    seats_remaining  = serializers.SerializerMethodField()
     is_enrolled      = serializers.SerializerMethodField()
     urgency          = serializers.SerializerMethodField()
 
@@ -34,7 +36,10 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "event_date",
             "event_time",
             "meeting_link",
+            "capacity",
             "enrollment_count",
+            "seats_taken",
+            "seats_remaining",
             "is_enrolled",
             "urgency",
             "created_at",
@@ -48,8 +53,24 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             1 for enrollment in obj.enrollments.all() if enrollment.status == "confirmed"
         )
 
+    def _active_count(self, obj):
+        # Les demandes en attente réservent aussi une place.
+        return sum(
+            1
+            for enrollment in obj.enrollments.all()
+            if enrollment.status != AnnouncementEnrollment.Status.REJECTED
+        )
+
     def get_enrollment_count(self, obj):
         return self._confirmed_count(obj)
+
+    def get_seats_taken(self, obj):
+        return self._active_count(obj)
+
+    def get_seats_remaining(self, obj):
+        if obj.capacity is None:
+            return None
+        return max(0, obj.capacity - self._active_count(obj))
 
     def get_urgency(self, obj):
         urgency = compute_urgency(obj, enrollment_count=self._confirmed_count(obj))
@@ -103,4 +124,12 @@ class AnnouncementEnrollmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"announcement": "Vous êtes déjà inscrit à cette formation."}
                 )
+            if announcement.capacity is not None:
+                taken = announcement.enrollments.exclude(
+                    status=AnnouncementEnrollment.Status.REJECTED
+                ).count()
+                if taken >= announcement.capacity:
+                    raise serializers.ValidationError(
+                        {"announcement": "Plus de places disponibles pour cette formation."}
+                    )
         return attrs

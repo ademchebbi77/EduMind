@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { AnnouncementCard } from './AnnouncementCard'
 
-function makeAnnouncement(urgency) {
+function makeAnnouncement(urgency, overrides = {}) {
   return {
     id: 1,
     title: 'Reprise des cours',
@@ -18,6 +18,7 @@ function makeAnnouncement(urgency) {
     is_pinned: false,
     created_at: '2026-10-25T10:00:00Z',
     urgency,
+    ...overrides,
   }
 }
 
@@ -41,7 +42,8 @@ describe('AnnouncementCard', () => {
     )
 
     expect(screen.getByText('Urgent')).toBeInTheDocument()
-    expect(screen.getByTitle('Événement imminent · Annonce récente')).toBeInTheDocument()
+    expect(screen.getByText('Urgence 70/100')).toBeInTheDocument()
+    expect(screen.getAllByTitle('Événement imminent · Annonce récente')).toHaveLength(2)
   })
 
   it('keeps low urgency announcements quiet', () => {
@@ -49,9 +51,26 @@ describe('AnnouncementCard', () => {
 
     expect(screen.queryByText('Urgent')).toBeNull()
     expect(screen.queryByText('Prioritaire')).toBeNull()
+    expect(screen.getByText('Urgence 10/100')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Reprise des cours' })).toHaveAttribute(
       'href',
       '/announcements/1',
     )
+  })
+
+  it('shows the number of seats for a formation', () => {
+    renderCard(
+      makeAnnouncement(undefined, { capacity: 20, seats_taken: 3, seats_remaining: 17 }),
+    )
+
+    expect(screen.getByText('3 / 20')).toBeInTheDocument()
+  })
+
+  it('marks a formation as full', () => {
+    renderCard(
+      makeAnnouncement(undefined, { capacity: 2, seats_taken: 2, seats_remaining: 0 }),
+    )
+
+    expect(screen.getByText('2 / 2 — complet')).toBeInTheDocument()
   })
 })

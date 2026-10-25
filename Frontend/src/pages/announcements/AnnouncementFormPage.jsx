@@ -35,6 +35,7 @@ export default function AnnouncementFormPage() {
     event_date:      '',   // YYYY-MM-DD
     event_time:      '',   // HH:MM
     event_link:      '',   // URL Meet/Zoom/Teams
+    capacity:        '',   // vide = places illimitées
   })
   const [errors, setErrors]       = useState({})
   const [formError, setFormError] = useState('')
@@ -65,6 +66,7 @@ export default function AnnouncementFormPage() {
           event_date:      payload.event_date || '',
           event_time:      payload.event_time || '',
           event_link:      payload.meeting_link || '',
+          capacity:        payload.capacity ?? '',
         })
       })
       .catch((err) => {
@@ -103,6 +105,12 @@ export default function AnnouncementFormPage() {
     if (values.event_link && !/^https?:\/\/.+/.test(values.event_link.trim())) {
       e.event_link = 'Le lien doit commencer par http:// ou https://'
     }
+    if (values.capacity !== '') {
+      const capacity = Number(values.capacity)
+      if (!Number.isInteger(capacity) || capacity < 1) {
+        e.capacity = 'Le nombre de places doit être un entier supérieur ou égal à 1.'
+      }
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -126,6 +134,7 @@ export default function AnnouncementFormPage() {
       event_date:      values.event_date || null,
       event_time:      values.event_time || null,
       meeting_link:    values.event_link.trim() || '',
+      capacity:        values.capacity === '' ? null : Number(values.capacity),
     }
 
     try {
@@ -141,8 +150,9 @@ export default function AnnouncementFormPage() {
     } catch (err) {
       const error = normalizeApiError(err, 'Enregistrement échoué.')
       const fieldErrs = {
-        title:   firstFieldError(error.fields, 'title'),
-        content: firstFieldError(error.fields, 'content'),
+        title:    firstFieldError(error.fields, 'title'),
+        content:  firstFieldError(error.fields, 'content'),
+        capacity: firstFieldError(error.fields, 'capacity'),
       }
       setErrors(fieldErrs)
       if (!Object.values(fieldErrs).some(Boolean)) {
@@ -332,6 +342,21 @@ export default function AnnouncementFormPage() {
                 <option value="students">Étudiants seulement</option>
                 <option value="teachers">Enseignants seulement</option>
               </Select>
+
+              <Input
+                label="Nombre de places"
+                name="capacity"
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                placeholder="Illimité"
+                value={values.capacity}
+                onChange={(e) => updateField('capacity', e.target.value)}
+                error={errors.capacity}
+                hint="Laissez vide pour des inscriptions illimitées."
+                disabled={saving}
+              />
 
               {sessions.length > 0 && (
                 <Select

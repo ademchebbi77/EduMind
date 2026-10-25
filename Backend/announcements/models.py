@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 
 
@@ -29,6 +30,15 @@ class Announcement(models.Model):
         related_name="announcements",
     )
     is_pinned = models.BooleanField(default=False, help_text="Épingler en haut du feed")
+
+    # Nombre de places pour une formation ; vide = inscriptions illimitées.
+    capacity = models.PositiveIntegerField(
+        "Nombre de places",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1)],
+        help_text="Laisser vide pour un nombre de places illimité.",
+    )
 
     # Détails de l'événement (optionnels)
     event_date = models.DateField(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { urgencyBadge } from './urgency'
+import { urgencyBadge, urgencyScore } from './urgency'
 
 describe('urgencyBadge', () => {
   it('maps high urgency to a visible badge with its reasons', () => {
@@ -23,5 +23,27 @@ describe('urgencyBadge', () => {
   it('hides low and missing urgency', () => {
     expect(urgencyBadge({ level: 'low', score: 10, reasons: [] })).toBeNull()
     expect(urgencyBadge(undefined)).toBeNull()
+  })
+})
+
+describe('urgencyScore', () => {
+  it('formats the numeric score with its reasons as tooltip', () => {
+    expect(urgencyScore({ level: 'high', score: 72, reasons: ['Événement imminent'] })).toEqual({
+      value: 72,
+      text: 'Urgence 72/100',
+      title: 'Événement imminent',
+    })
+  })
+
+  it('keeps the score visible for low urgency', () => {
+    expect(urgencyScore({ level: 'low', score: 0, reasons: [] })).toEqual({
+      value: 0,
+      text: 'Urgence 0/100',
+      title: undefined,
+    })
+  })
+
+  it('returns null when the API does not provide a score', () => {
+    expect(urgencyScore(undefined)).toBeNull()
   })
 })

@@ -189,6 +189,10 @@ disponible sur `http://127.0.0.1:8000/admin/` (comptes staff uniquement).
 régénère les fichiers de cours manquants. Il crée quatre cours d'exemple
 (deux PDF, deux audio).
 
+Pour visualiser les scores d'urgence, `python manage.py seed_announcements` crée
+12 annonces de démonstration (dates relatives au jour d'exécution, inscriptions
+confirmées) et affiche leur score calculé.
+
 ### 4. Frontend
 
 ```bash

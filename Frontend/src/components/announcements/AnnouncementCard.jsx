@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom'
-import { CalendarDays, Megaphone, Pencil, Pin, Trash2 } from 'lucide-react'
+import { CalendarDays, Gauge, Megaphone, Pencil, Pin, Trash2 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { formatDate } from '../../lib/format'
-import { urgencyBadge } from '../../lib/urgency'
+import { urgencyBadge, urgencyScore } from '../../lib/urgency'
 
 const AUDIENCE_VARIANTS = {
   all:      'default',
@@ -18,6 +18,7 @@ const AUDIENCE_LABELS = {
 
 export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
   const urgency = urgencyBadge(announcement.urgency)
+  const score = urgencyScore(announcement.urgency)
 
   return (
     <article className="surface relative flex flex-col gap-3 overflow-hidden p-5 transition duration-200 hover:border-slate-300 hover:shadow-sm">
@@ -63,13 +64,22 @@ export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
         </p>
       </div>
 
-      {(announcement.related_session_title || announcement.event_date || announcement.meeting_link) && (
+      {(announcement.related_session_title || announcement.event_date || announcement.meeting_link || announcement.capacity != null) && (
         <div className="rounded-lg bg-mist px-3 py-2 text-xs text-slate-600 space-y-1">
           {announcement.related_session_title && (
             <p>📅 Session liée : <span className="font-medium">{announcement.related_session_title}</span></p>
           )}
           {announcement.event_date && (
             <p>📅 <span className="font-medium">{announcement.event_date}{announcement.event_time ? ` à ${announcement.event_time}` : ''}</span></p>
+          )}
+          {announcement.capacity != null && (
+            <p>
+              🎟️ Places :{' '}
+              <span className={`font-medium ${announcement.seats_remaining === 0 ? 'text-clay' : ''}`}>
+                {announcement.seats_taken ?? 0} / {announcement.capacity}
+                {announcement.seats_remaining === 0 ? ' — complet' : ''}
+              </span>
+            </p>
           )}
           {announcement.meeting_link && (
             <p>
@@ -95,6 +105,12 @@ export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
             <CalendarDays className="size-3.5" aria-hidden="true" />
             {formatDate(announcement.created_at)}
           </span>
+          {score && (
+            <span className="inline-flex items-center gap-1 font-medium" title={score.title}>
+              <Gauge className="size-3.5" aria-hidden="true" />
+              {score.text}
+            </span>
+          )}
         </div>
 
         {canEdit && (

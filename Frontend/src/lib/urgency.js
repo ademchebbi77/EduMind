@@ -12,3 +12,16 @@ export function urgencyBadge(urgency) {
   if (!badge) return null
   return { ...badge, title: urgency.reasons?.length ? urgency.reasons.join(' · ') : undefined }
 }
+
+/**
+ * Score chiffré, affiché en complément du badge (y compris pour les annonces
+ * de niveau faible, afin que chaque score reste lisible).
+ */
+export function urgencyScore(urgency) {
+  if (!urgency || typeof urgency.score !== 'number') return null
+  return {
+    value: urgency.score,
+    text: `Urgence ${urgency.score}/100`,
+    title: urgency.reasons?.length ? urgency.reasons.join(' · ') : undefined,
+  }
+}
