@@ -2,6 +2,8 @@ from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 
+from .categorization import CATEGORY_CHOICES
+
 
 class Announcement(models.Model):
     class TargetAudience(models.TextChoices):
@@ -30,6 +32,15 @@ class Announcement(models.Model):
         related_name="announcements",
     )
     is_pinned = models.BooleanField(default=False, help_text="Épingler en haut du feed")
+
+    # Catégorie choisie par l'auteur ; vide = détection automatique par lexique.
+    category_override = models.CharField(
+        "Catégorie",
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        blank=True,
+        default="",
+    )
 
     # Nombre de places pour une formation ; vide = inscriptions illimitées.
     capacity = models.PositiveIntegerField(

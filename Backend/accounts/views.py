@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.contrib.auth import login, logout, update_session_auth_hash
+from django.db.models import Q
 from django.http import FileResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
@@ -10,8 +11,12 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from assessments.models import ExerciseSubmission, QuizAttempt
+from sessions.models import SessionEnrollment
+
 from .models import User
 from .permissions import IsAdminRole
+from .risk import compute_risk_profiles
 from .serializers import (
     AdminUserSerializer,
     AdminUserUpdateSerializer,
@@ -214,3 +219,72 @@ class AdminUserDetailView(generics.RetrieveUpdateDestroyAPIView):
 
         self.perform_destroy(user)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AtRiskStudentsView(APIView):
+    """Liste les étudiants avec un score de risque calculé localement."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role not in (User.Role.ADMIN, User.Role.TEACHER):
+            return Response(
+                {"detail": "Cette analyse est réservée aux enseignants et administrateurs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        students = User.objects.filter(role=User.Role.STUDENT, is_active=True)
+
+        if request.user.role == User.Role.TEACHER:
+            teacher = request.user
+            student_ids = set(
+                SessionEnrollment.objects.filter(
+                    Q(session__created_by=teacher)
+                    | Q(session__assigned_teachers=teacher)
+                ).values_list("student_id", flat=True)
+            )
+            student_ids |= set(
+                QuizAttempt.objects.filter(
+                    quiz__course__owner=teacher
+                ).values_list("student_id", flat=True)
+            )
+            student_ids |= set(
+                ExerciseSubmission.objects.filter(
+                    exercise__course__owner=teacher
+                ).values_list("student_id", flat=True)
+            )
+            students = students.filter(pk__in=student_ids)
+
+        level = request.query_params.get("level")
+        if level and level not in {"high", "medium", "low"}:
+            raise ValidationError({"level": "Le niveau doit être high, medium ou low."})
+
+        profiles = compute_risk_profiles(students)
+        summary = {
+            "high": sum(1 for p in profiles if p.level == "high"),
+            "medium": sum(1 for p in profiles if p.level == "medium"),
+            "low": sum(1 for p in profiles if p.level == "low"),
+        }
+        if level:
+            profiles = [profile for profile in profiles if profile.level == level]
+
+        results = [
+            {
+                "student_id": profile.student.pk,
+                "full_name": profile.student.full_name,
+                "email": profile.student.email,
+                "score": profile.score,
+                "level": profile.level,
+                "label": profile.label,
+                "reasons": list(profile.reasons),
+                "quiz_average": profile.quiz_average,
+                "quiz_attempts": profile.quiz_attempts,
+                "failed_attempts": profile.failed_attempts,
+                "days_inactive": profile.days_inactive,
+                "overdue_exercises": profile.overdue_exercises,
+            }
+            for profile in profiles
+        ]
+        return Response(
+            {"count": len(results), "summary": summary, "results": results}
+        )

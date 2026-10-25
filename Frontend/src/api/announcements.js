@@ -1,11 +1,12 @@
 import { api } from '../lib/api'
 
 export async function fetchAnnouncements(
-  { search = '', page = 1 } = {},
+  { search = '', category = '', page = 1 } = {},
   { signal } = {},
 ) {
   const params = { page }
   if (search) params.search = search
+  if (category) params.category = category
   const { data } = await api.get('/announcements/', { params, signal })
   return data
 }

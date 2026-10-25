@@ -26,3 +26,13 @@ export async function updateUser(userId, payload) {
 export async function deleteUser(userId) {
   await api.delete(`/auth/users/${userId}/`)
 }
+
+/**
+ * Étudiants à risque, score calculé localement (enseignants et admins).
+ */
+export async function fetchAtRiskStudents({ level = '' } = {}, { signal } = {}) {
+  const params = {}
+  if (level) params.level = level
+  const { data } = await api.get('/auth/at-risk/', { params, signal })
+  return data
+}

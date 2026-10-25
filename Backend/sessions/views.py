@@ -1,3 +1,6 @@
+from dataclasses import asdict
+
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import filters, serializers, status, viewsets
@@ -8,9 +11,11 @@ from rest_framework.response import Response
 from accounts.models import User
 from accounts.permissions import IsAdminRole
 
+from .forecast import forecast_upcoming
 from .models import LiveSession, SessionEnrollment
 from .permissions import CanManageEnrollment, CanManageSession
 from .recommendations import recommend_sessions_for
+from .scheduling import best_time_slots
 from .serializers import LiveSessionSerializer, SessionEnrollmentSerializer
 
 
@@ -121,6 +126,71 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
             data["recommendation_reason"] = recommendation.reason
             payload.append(data)
         return Response(payload)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="enrollment-forecast",
+        url_name="enrollment-forecast",
+        permission_classes=[IsAuthenticated],
+    )
+    def enrollment_forecast(self, request):
+        """Prévision locale du nombre d'inscrits pour les prochaines sessions."""
+        if request.user.role not in (User.Role.ADMIN, User.Role.TEACHER):
+            return Response(
+                {"detail": "Les prévisions sont réservées aux enseignants et administrateurs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        raw_limit = request.query_params.get("limit", "5")
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            return Response(
+                {"limit": "La limite doit être un entier."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not 1 <= limit <= 20:
+            return Response(
+                {"limit": "La limite doit être entre 1 et 20."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = []
+        for session, forecast in forecast_upcoming(self.get_queryset(), limit=limit):
+            payload.append(
+                {
+                    "session": LiveSessionSerializer(
+                        session, context={"request": request}
+                    ).data,
+                    "forecast": asdict(forecast),
+                }
+            )
+        return Response(payload)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="best-times",
+        url_name="best-times",
+        permission_classes=[IsAuthenticated],
+    )
+    def best_times(self, request):
+        """Créneaux historiquement les plus remplis, calculés localement."""
+        if request.user.role not in (User.Role.ADMIN, User.Role.TEACHER):
+            return Response(
+                {"detail": "Les créneaux suggérés sont réservés aux enseignants et administrateurs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        sessions = self.get_queryset().filter(starts_at__lt=timezone.now())
+        slots = best_time_slots(sessions=sessions)
+        return Response(
+            {
+                "sample_size": len(sessions),
+                "slots": [asdict(slot) for slot in slots],
+            }
+        )
 
     @action(
         detail=False,

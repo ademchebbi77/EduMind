@@ -26,8 +26,11 @@ téléversement de fichiers).
 - API JSON, validation des fichiers, limitation des tentatives de connexion.
 - Interface React responsive, en français, accessible au clavier et conforme aux
   contrastes WCAG AA.
-- Recommandations de sessions et score d'urgence des annonces, calculés localement
-  (TF-IDF, similarité cosinus et règles), sans service externe ni modèle entraîné.
+- Recommandations de sessions, score d'urgence et catégorisation automatique des
+  annonces, détection des étudiants à risque et prévision de remplissage, calculés
+  localement (TF-IDF, similarité cosinus, lexiques et règles à seuils), sans service
+  externe ni modèle entraîné.
+- Suggestion des créneaux horaires qui ont le mieux rempli les sessions passées.
 - Tests automatisés backend et frontend, couverture mesurée.
 
 ### Hors périmètre (volontairement absent)
@@ -36,7 +39,6 @@ Aucun stub ni écran factice n'a été ajouté pour les fonctionnalités suivant
 pourront être développées dans des applications Django séparées :
 
 - modèles d'IA entraînés (classification, régression, détection d'anomalies) ;
-- quiz et évaluations ;
 - reconnaissance faciale et gestion de présence ;
 - visioconférence et parcours de formation ;
 - files de tâches asynchrones (Celery) et Redis ;
@@ -192,6 +194,24 @@ régénère les fichiers de cours manquants. Il crée quatre cours d'exemple
 Pour visualiser les scores d'urgence, `python manage.py seed_announcements` crée
 12 annonces de démonstration (dates relatives au jour d'exécution, inscriptions
 confirmées) et affiche leur score calculé.
+
+`python manage.py seed_session_history` alimente les analyses locales avec un
+historique idempotent de sessions passées et à venir, d'inscriptions confirmées, de
+tentatives de quiz et d'un exercice en retard. La commande affiche ensuite les
+prévisions de remplissage et les meilleurs créneaux calculés.
+
+Les analyses sont ensuite visibles dans l'interface :
+
+- **Annonces** : champ de catégorie dans le formulaire (Automatique par défaut,
+  ou Formation, Évaluation, Administratif, Événement, Rappel, Autre), badge et
+  filtre dédiés ; détail avec catégorie et confiance (ou mention « Manuelle »).
+- **Sessions** (enseignants et administrateurs) : prévision de remplissage des
+  prochaines sessions, avec fourchette et niveau de confiance.
+- **Nouvelle session** : carte « Créneaux suggérés » avec application en un clic de
+  la date et de l'heure.
+- **Étudiants à risque** (enseignants et administrateurs) : score, niveau, signaux
+  explicables (moyenne aux quiz, inactivité, exercices en retard) et filtre par
+  niveau.
 
 ### 4. Frontend
 
@@ -437,9 +457,9 @@ PYTHONUTF8=1 coverage report
 PYTHONUTF8=1 coverage html        # rapport détaillé dans htmlcov/
 ```
 
-Résultat actuel : **93 tests OK**, **92 % de couverture** (branches incluses) sur
-`accounts` et `courses`. Le seuil minimal configuré dans `.coveragerc` est de 85 %.
-La suite dure environ 70 secondes.
+Résultat actuel : **270 tests OK** sur les applications `accounts`, `courses`,
+`announcements`, `sessions` et `assessments`. Le seuil minimal configuré dans
+`.coveragerc` est de 85 %.
 
 ### Frontend
 
@@ -451,9 +471,10 @@ npm run coverage
 npm run build
 ```
 
-Résultat actuel : **ESLint sans erreur**, **44 tests Vitest OK**, build de production
-réussi. La couverture frontend n'a pas de seuil imposé ; l'objectif de 85 % portait
-sur les applications backend `accounts` et `courses`.
+Résultat actuel : **126 tests Vitest OK**, build de production réussi. ESLint
+signale 14 erreurs historiques (`react-hooks/set-state-in-effect`) dans des pages
+antérieures aux modules d'analyse. La couverture frontend n'a pas de seuil imposé ;
+l'objectif de 85 % portait sur les applications backend `accounts` et `courses`.
 
 ### Audits Lighthouse
 
@@ -508,8 +529,8 @@ Notes :
 | Erreurs JSON homogènes | OK | Gestionnaire DRF + 404/500/CSRF |
 | Gestion des comptes par l'admin | OK | API `users`, écran React, protections serveur |
 | Suppression des comptes | OK | `DELETE` admin, cascade cours/fichiers, confirmation |
-| Tests et couverture backend ≥ 85 % | OK | 143 tests, 93 % |
-| Tests frontend et lint | OK | 74 tests, ESLint sans erreur |
+| Tests et couverture backend ≥ 85 % | OK | 270 tests |
+| Tests frontend et lint | OK | 126 tests, build réussi |
 | Accessibilité WCAG AA | OK | Audit Lighthouse 100 |
 | Documentation en français | OK | Ce fichier |
 | Absence de stubs hors périmètre | OK | Aucun écran ni endpoint factice |

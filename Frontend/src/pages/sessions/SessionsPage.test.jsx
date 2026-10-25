@@ -3,13 +3,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '../../context/AuthContext'
 import { ToastProvider } from '../../context/ToastContext'
-import { deleteSession, fetchRecommendedSessions, fetchSessions } from '../../api/sessions'
+import { deleteSession, fetchEnrollmentForecast, fetchRecommendedSessions, fetchSessions } from '../../api/sessions'
 import SessionsPage from './SessionsPage'
 
 vi.mock('../../context/AuthContext', () => ({ useAuth: vi.fn() }))
 vi.mock('../../api/sessions', () => ({
   fetchSessions: vi.fn(),
   fetchRecommendedSessions: vi.fn(),
+  fetchEnrollmentForecast: vi.fn(),
   deleteSession: vi.fn(),
 }))
 
@@ -53,6 +54,19 @@ describe('SessionsPage recommendations', () => {
     vi.clearAllMocks()
     fetchSessions.mockResolvedValue({ count: 1, next: null, previous: null, results: [upcoming] })
     fetchRecommendedSessions.mockResolvedValue([recommended])
+    fetchEnrollmentForecast.mockResolvedValue([
+      {
+        session: upcoming,
+        forecast: {
+          expected_enrollments: 6,
+          current_enrollments: 3,
+          minimum: 4,
+          maximum: 8,
+          confidence: 'high',
+          confidence_label: 'Élevée',
+        },
+      },
+    ])
   })
 
   it('shows students a recommended section with the reason', async () => {
@@ -73,6 +87,19 @@ describe('SessionsPage recommendations', () => {
     expect(screen.queryByRole('heading', { name: 'Recommandé pour vous' })).toBeNull()
     expect(fetchRecommendedSessions).not.toHaveBeenCalled()
     await waitFor(() => expect(deleteSession).not.toHaveBeenCalled())
+  })
+
+  it('shows teachers a fill-rate forecast', async () => {
+    renderPage('teacher')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Prévision de remplissage' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('≈ 6')).toBeInTheDocument()
+    expect(fetchEnrollmentForecast).toHaveBeenCalledWith(
+      { limit: 3 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
   })
 
   it('keeps the list usable when recommendations fail', async () => {

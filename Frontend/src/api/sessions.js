@@ -25,6 +25,25 @@ export async function fetchRecommendedSessions({ limit = 6 } = {}, { signal } = 
   return data
 }
 
+/**
+ * Prévision locale du remplissage des prochaines sessions (managers).
+ */
+export async function fetchEnrollmentForecast({ limit = 5 } = {}, { signal } = {}) {
+  const { data } = await api.get('/sessions/enrollment-forecast/', {
+    params: { limit },
+    signal,
+  })
+  return data
+}
+
+/**
+ * Créneaux historiquement les plus remplis (managers).
+ */
+export async function fetchBestTimeSlots({ signal } = {}) {
+  const { data } = await api.get('/sessions/best-times/', { signal })
+  return data
+}
+
 export async function fetchSession(id, { signal } = {}) {
   const { data } = await api.get(`/sessions/${id}/`, { signal })
   return data

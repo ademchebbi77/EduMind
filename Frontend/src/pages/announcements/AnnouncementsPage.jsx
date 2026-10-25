@@ -9,9 +9,10 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import { LinkButton, Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input } from '../../components/ui/Field'
+import { Input, Select } from '../../components/ui/Field'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { AnnouncementCard } from '../../components/announcements/AnnouncementCard'
+import { ANNOUNCEMENT_CATEGORIES } from '../../lib/categories'
 
 const EMPTY_RESULTS = { count: 0, next: null, previous: null, results: [] }
 
@@ -24,6 +25,7 @@ export default function AnnouncementsPage() {
   const canCreate = user?.role === 'teacher' || user?.role === 'admin'
 
   const [search, setSearch]   = useState('')
+  const [category, setCategory] = useState('')
   const [page, setPage]       = useState(1)
   const [reload, setReload]   = useState(0)
   const [toDelete, setToDelete] = useState(null)
@@ -35,8 +37,9 @@ export default function AnnouncementsPage() {
 
   const query = useMemo(() => ({
     search: debouncedSearch.trim(),
+    category,
     page,
-  }), [debouncedSearch, page])
+  }), [debouncedSearch, category, page])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -57,7 +60,7 @@ export default function AnnouncementsPage() {
   }, [query, reload])
 
   const results    = data.results ?? []
-  const hasFilters = Boolean(search.trim())
+  const hasFilters = Boolean(search.trim() || category)
   const showSkeleton = loading && results.length === 0
   const showEmpty    = !loading && !error && results.length === 0
 
@@ -96,17 +99,34 @@ export default function AnnouncementsPage() {
       </header>
 
       <Card className="bg-paper/90">
-        <Input
-          label="Rechercher"
-          type="search"
-          name="search"
-          placeholder="Titre ou contenu…"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-        />
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input
+            label="Rechercher"
+            type="search"
+            name="search"
+            placeholder="Titre ou contenu…"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+          />
+          <Select
+            label="Catégorie"
+            name="category"
+            value={category}
+            onChange={(e) => { setCategory(e.target.value); setPage(1) }}
+          >
+            <option value="">Toutes les catégories</option>
+            {ANNOUNCEMENT_CATEGORIES.map((item) => (
+              <option key={item.key} value={item.key}>{item.label}</option>
+            ))}
+          </Select>
+        </div>
         {hasFilters && (
           <div className="mt-4 flex justify-end">
-            <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setPage(1) }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { setSearch(''); setCategory(''); setPage(1) }}
+            >
               <RotateCcw className="size-4" aria-hidden="true" />
               Réinitialiser
             </Button>
@@ -161,7 +181,10 @@ export default function AnnouncementsPage() {
           title="Aucun résultat"
           description="Essayez un autre mot-clé."
           action={
-            <Button variant="secondary" onClick={() => setSearch('')}>
+            <Button
+              variant="secondary"
+              onClick={() => { setSearch(''); setCategory(''); setPage(1) }}
+            >
               Réinitialiser
             </Button>
           }
