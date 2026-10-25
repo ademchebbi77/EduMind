@@ -46,6 +46,20 @@ export async function fetchSessionEnrollments(sessionId) {
 }
 
 /**
+ * Calendrier — retourne toutes les sessions d'une plage sans pagination
+ */
+export async function fetchCalendarSessions(
+  { startsAfter, startsBefore } = {},
+  { signal } = {},
+) {
+  const params = {}
+  if (startsAfter)  params.starts_after  = startsAfter
+  if (startsBefore) params.starts_before = startsBefore
+  const { data } = await api.get('/sessions/calendar/', { params, signal })
+  return data
+}
+
+/**
  * Inscriptions
  */
 export async function fetchEnrollments(

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BookOpen,
+  Calendar,
   ClipboardCheck,
   LayoutDashboard,
   Loader2,
@@ -95,6 +96,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
         <NavLink to="/sessions" onClick={onNavigate} className={navLinkClasses}>
           <Video className="size-5" aria-hidden="true" />
           Sessions en ligne
+        </NavLink>
+        <NavLink to="/calendar" onClick={onNavigate} className={navLinkClasses}>
+          <Calendar className="size-5" aria-hidden="true" />
+          Calendrier
         </NavLink>
         <NavLink to="/announcements" onClick={onNavigate} className={navLinkClasses}>
           <Megaphone className="size-5" aria-hidden="true" />

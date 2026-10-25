@@ -44,6 +44,15 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
                 )
             queryset = queryset.filter(status=session_status)
 
+        # Filtres de plage de dates pour le calendrier
+        starts_after = self.request.query_params.get("starts_after")
+        if starts_after:
+            queryset = queryset.filter(starts_at__gte=starts_after)
+
+        starts_before = self.request.query_params.get("starts_before")
+        if starts_before:
+            queryset = queryset.filter(starts_at__lte=starts_before)
+
         # Un teacher ne voit que ses propres sessions + les formations où il est assigné
         user = self.request.user
         if user.role == User.Role.TEACHER:
@@ -72,6 +81,25 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
     @method_decorator(csrf_protect)
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="calendar",
+        url_name="calendar",
+    )
+    def calendar(self, request):
+        """Retourne toutes les sessions d'une plage de dates sans pagination (pour le calendrier)."""
+        queryset = self.get_queryset().filter(
+            status__in=[
+                LiveSession.Status.SCHEDULED,
+                LiveSession.Status.ONGOING,
+            ]
+        )
+        serializer = LiveSessionSerializer(
+            queryset, many=True, context={"request": request}
+        )
+        return Response(serializer.data)
 
     @action(
         detail=True,
