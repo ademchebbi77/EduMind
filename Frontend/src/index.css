@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, Cambria, "Times New Roman",
+    serif;
+
+  --color-ink: #14213d;
+  --color-ink-soft: #35415a;
+  --color-brand: #b45309;
+  --color-brand-strong: #92400e;
+  --color-gold: #e9c18c;
+  --color-sage: #2f6b5f;
+  --color-clay: #b93815;
+  --color-mist: #f7f2e8;
+  --color-line: #e3d8c5;
+  --color-paper: #fffdf8;
+  --color-white: #fffdf8;
+
+  --color-slate-50: #fbf7ef;
+  --color-slate-100: #f4ecdf;
+  --color-slate-200: #e8ddcb;
+  --color-slate-300: #d4c7b2;
+  --color-slate-400: #8a7f6c;
+  --color-slate-500: #6f6555;
+  --color-slate-600: #5b5345;
+  --color-slate-700: #484136;
+  --color-slate-800: #363129;
+  --color-slate-900: #26221c;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-mist font-sans text-ink-soft antialiased;
+    background-image:
+      radial-gradient(48rem 28rem at 92% -10%, rgb(180 83 9 / 0.08), transparent 65%),
+      radial-gradient(rgb(20 33 61 / 0.045) 0.7px, transparent 0.7px);
+    background-size: auto, 22px 22px;
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  ::selection {
+    @apply bg-brand/20 text-ink;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand;
+  }
+}
+
+@layer components {
+  .skip-link {
+    @apply sr-only rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-white;
+  }
+
+  .skip-link:focus {
+    @apply not-sr-only fixed left-4 top-4 z-[100];
+  }
+
+  .brand-gradient {
+    background-image: linear-gradient(145deg, #22385b 0%, #14213d 55%, #0f1a30 100%);
+  }
+
+  .surface {
+    @apply rounded-2xl border border-line bg-paper shadow-[0_1px_2px_rgb(20_33_61_/_0.04)];
+  }
+
+  .academic-rule {
+    @apply block h-1 w-14 rounded-full bg-brand;
+  }
+
+  .toast-enter {
+    animation: toast-in 180ms ease-out both;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Django
+media/
+staticfiles/
+*.sqlite3
+
+# Frontend
+node_modules/
+dist/
+coverage/
+.vite/
+npm-debug.log*
+yarn-error.log*
+
+# Editors and tooling
+.qoder/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
