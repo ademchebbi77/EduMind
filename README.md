@@ -26,6 +26,8 @@ téléversement de fichiers).
 - API JSON, validation des fichiers, limitation des tentatives de connexion.
 - Interface React responsive, en français, accessible au clavier et conforme aux
   contrastes WCAG AA.
+- Recommandations de sessions et score d'urgence des annonces, calculés localement
+  (TF-IDF, similarité cosinus et règles), sans service externe ni modèle entraîné.
 - Tests automatisés backend et frontend, couverture mesurée.
 
 ### Hors périmètre (volontairement absent)
@@ -33,7 +35,7 @@ téléversement de fichiers).
 Aucun stub ni écran factice n'a été ajouté pour les fonctionnalités suivantes, qui
 pourront être développées dans des applications Django séparées :
 
-- fonctionnalités d'intelligence artificielle ;
+- modèles d'IA entraînés (classification, régression, détection d'anomalies) ;
 - quiz et évaluations ;
 - reconnaissance faciale et gestion de présence ;
 - visioconférence et parcours de formation ;

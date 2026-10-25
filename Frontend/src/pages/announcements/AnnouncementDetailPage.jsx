@@ -9,6 +9,7 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
 import { formatDate } from '../../lib/format'
+import { urgencyBadge } from '../../lib/urgency'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
@@ -164,6 +165,8 @@ export default function AnnouncementDetailPage() {
 
   if (!announcement) return null
 
+  const urgency = urgencyBadge(announcement.urgency)
+
   return (
     <div className="space-y-6">
       <BackLink />
@@ -183,6 +186,11 @@ export default function AnnouncementDetailPage() {
                 <span className="inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 text-xs font-medium text-gold">
                   <Pin className="size-3" aria-hidden="true" />
                   Épinglée
+                </span>
+              )}
+              {urgency && (
+                <span title={urgency.title}>
+                  <Badge variant={urgency.variant}>{urgency.label}</Badge>
                 </span>
               )}
             </div>

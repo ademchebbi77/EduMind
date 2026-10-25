@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { CalendarDays, Megaphone, Pencil, Pin, Trash2 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
 import { formatDate } from '../../lib/format'
+import { urgencyBadge } from '../../lib/urgency'
 
 const AUDIENCE_VARIANTS = {
   all:      'default',
@@ -16,6 +17,8 @@ const AUDIENCE_LABELS = {
 }
 
 export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
+  const urgency = urgencyBadge(announcement.urgency)
+
   return (
     <article className="surface relative flex flex-col gap-3 overflow-hidden p-5 transition duration-200 hover:border-slate-300 hover:shadow-sm">
       {announcement.is_pinned && (
@@ -34,9 +37,16 @@ export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
             </span>
           )}
         </div>
-        <Badge variant={AUDIENCE_VARIANTS[announcement.target_audience] || 'default'}>
-          {AUDIENCE_LABELS[announcement.target_audience] || announcement.target_audience_display}
-        </Badge>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {urgency && (
+            <span title={urgency.title}>
+              <Badge variant={urgency.variant}>{urgency.label}</Badge>
+            </span>
+          )}
+          <Badge variant={AUDIENCE_VARIANTS[announcement.target_audience] || 'default'}>
+            {AUDIENCE_LABELS[announcement.target_audience] || announcement.target_audience_display}
+          </Badge>
+        </div>
       </div>
 
       <div>

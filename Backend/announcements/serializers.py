@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import Announcement, AnnouncementEnrollment
+from .urgency import compute_urgency
 
 
 class AnnouncementSerializer(serializers.ModelSerializer):
@@ -14,6 +15,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     )
     enrollment_count = serializers.SerializerMethodField()
     is_enrolled      = serializers.SerializerMethodField()
+    urgency          = serializers.SerializerMethodField()
 
     class Meta:
         model = Announcement
@@ -34,13 +36,29 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "meeting_link",
             "enrollment_count",
             "is_enrolled",
+            "urgency",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("id", "author", "created_at", "updated_at")
 
+    def _confirmed_count(self, obj):
+        # obj.enrollments est préchargé par la vue : pas de requête par annonce.
+        return sum(
+            1 for enrollment in obj.enrollments.all() if enrollment.status == "confirmed"
+        )
+
     def get_enrollment_count(self, obj):
-        return obj.enrollments.filter(status="confirmed").count()
+        return self._confirmed_count(obj)
+
+    def get_urgency(self, obj):
+        urgency = compute_urgency(obj, enrollment_count=self._confirmed_count(obj))
+        return {
+            "score": urgency.score,
+            "level": urgency.level,
+            "label": urgency.label,
+            "reasons": list(urgency.reasons),
+        }
 
     def get_is_enrolled(self, obj):
         request = self.context.get("request")

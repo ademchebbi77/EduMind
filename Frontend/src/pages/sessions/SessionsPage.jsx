@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, RotateCcw, SearchX, AlertTriangle, Video } from 'lucide-react'
-import { fetchSessions, deleteSession } from '../../api/sessions'
+import { Plus, RotateCcw, SearchX, AlertTriangle, Sparkles, Video } from 'lucide-react'
+import { fetchSessions, deleteSession, fetchRecommendedSessions } from '../../api/sessions'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
@@ -23,6 +23,7 @@ export default function SessionsPage() {
   const { addToast } = useToast()
 
   const canCreate = user?.role === 'teacher' || user?.role === 'admin'
+  const isStudent = user?.role === 'student'
 
   const [search, setSearch]       = useState('')
   const [type, setType]           = useState('')
@@ -34,6 +35,9 @@ export default function SessionsPage() {
   const [loading, setLoading] = useState(true)
   const [data, setData]       = useState(EMPTY_RESULTS)
   const [error, setError]     = useState(null)
+
+  const [recommended, setRecommended]           = useState([])
+  const [recommendedFailed, setRecommendedFailed] = useState(false)
 
   const debouncedSearch = useDebouncedValue(search)
 
@@ -62,6 +66,22 @@ export default function SessionsPage() {
       })
     return () => controller.abort()
   }, [query, reload])
+
+  useEffect(() => {
+    if (!isStudent) return undefined
+    const controller = new AbortController()
+    fetchRecommendedSessions({ limit: 3 }, { signal: controller.signal })
+      .then((items) => {
+        setRecommended(items)
+        setRecommendedFailed(false)
+      })
+      .catch((err) => {
+        if (isCanceled(err)) return
+        setRecommended([])
+        setRecommendedFailed(true)
+      })
+    return () => controller.abort()
+  }, [isStudent, reload])
 
   const results    = data.results ?? []
   const hasFilters = Boolean(search.trim() || type || statusFilter)
@@ -105,6 +125,42 @@ export default function SessionsPage() {
           </LinkButton>
         )}
       </header>
+
+      {isStudent && recommended.length > 0 && (
+        <section aria-labelledby="recommended-heading" className="space-y-4">
+          <div className="flex items-start gap-3">
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand/10 text-brand-strong ring-1 ring-inset ring-brand/15">
+              <Sparkles className="size-4" aria-hidden="true" />
+            </span>
+            <div>
+              <h2
+                id="recommended-heading"
+                className="font-display text-xl font-semibold tracking-tight text-ink"
+              >
+                Recommandé pour vous
+              </h2>
+              <p className="mt-1 text-sm leading-relaxed text-slate-600">
+                Calculé à partir de vos inscriptions, de vos quiz et de vos demandes de formation.
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {recommended.map((session) => (
+              <SessionCard
+                key={session.id}
+                session={session}
+                recommendationReason={session.recommendation_reason}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isStudent && recommendedFailed && (
+        <p className="text-sm text-slate-500">
+          Les recommandations sont momentanément indisponibles.
+        </p>
+      )}
 
       <Card className="bg-paper/90">
         <div className="grid gap-4 md:grid-cols-3">

@@ -10,6 +10,7 @@ from accounts.permissions import IsAdminRole
 
 from .models import LiveSession, SessionEnrollment
 from .permissions import CanManageEnrollment, CanManageSession
+from .recommendations import recommend_sessions_for
 from .serializers import LiveSessionSerializer, SessionEnrollmentSerializer
 
 
@@ -81,6 +82,45 @@ class LiveSessionViewSet(viewsets.ModelViewSet):
     @method_decorator(csrf_protect)
     def destroy(self, request, *args, **kwargs):
         return super().destroy(request, *args, **kwargs)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="recommended",
+        url_name="recommended",
+        permission_classes=[IsAuthenticated],
+    )
+    def recommended(self, request):
+        """Sessions à venir suggérées à un étudiant, calculées sur place."""
+        if request.user.role != User.Role.STUDENT:
+            return Response(
+                {"detail": "Les recommandations sont réservées aux étudiants."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        raw_limit = request.query_params.get("limit", "6")
+        try:
+            limit = int(raw_limit)
+        except (TypeError, ValueError):
+            return Response(
+                {"limit": "Le nombre de recommandations doit être un entier."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not 1 <= limit <= 20:
+            return Response(
+                {"limit": "Le nombre de recommandations doit être entre 1 et 20."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        payload = []
+        for recommendation in recommend_sessions_for(request.user, limit=limit):
+            data = LiveSessionSerializer(
+                recommendation.session, context={"request": request}
+            ).data
+            data["match_score"] = recommendation.score
+            data["recommendation_reason"] = recommendation.reason
+            payload.append(data)
+        return Response(payload)
 
     @action(
         detail=False,

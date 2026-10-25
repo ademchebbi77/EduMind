@@ -16,6 +16,15 @@ export async function fetchSessions(
   return data
 }
 
+/**
+ * Recommandations personnalisées (étudiants uniquement) — renvoie un tableau
+ * de sessions triées, chacune avec `match_score` et `recommendation_reason`.
+ */
+export async function fetchRecommendedSessions({ limit = 6 } = {}, { signal } = {}) {
+  const { data } = await api.get('/sessions/recommended/', { params: { limit }, signal })
+  return data
+}
+
 export async function fetchSession(id, { signal } = {}) {
   const { data } = await api.get(`/sessions/${id}/`, { signal })
   return data

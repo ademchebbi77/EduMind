@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
-import { CalendarDays, Clock, ExternalLink, Pencil, Trash2, Users, Video } from 'lucide-react'
+import { CalendarDays, Clock, ExternalLink, Pencil, Sparkles, Trash2, Users, Video } from 'lucide-react'
 import { Badge } from '../ui/Badge'
-import { formatDateTime, formatTime } from '../../lib/format'
+import { formatDateTime } from '../../lib/format'
 
 const STATUS_VARIANTS = {
   scheduled: 'brand',
@@ -22,7 +22,7 @@ const TYPE_LABELS = {
   training: 'Formation',
 }
 
-export function SessionCard({ session, canEdit = false, onDelete }) {
+export function SessionCard({ session, canEdit = false, onDelete, recommendationReason }) {
   const isTraining = session.session_type === 'training'
 
   return (
@@ -64,6 +64,13 @@ export function SessionCard({ session, canEdit = false, onDelete }) {
       {session.description ? (
         <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-slate-600">
           {session.description}
+        </p>
+      ) : null}
+
+      {recommendationReason ? (
+        <p className="mt-2 flex items-start gap-1.5 text-xs font-medium leading-relaxed text-brand-strong">
+          <Sparkles className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {recommendationReason}
         </p>
       ) : null}
 
