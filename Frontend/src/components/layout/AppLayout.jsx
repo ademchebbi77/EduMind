@@ -4,6 +4,7 @@ import {
   BookOpen,
   Calendar,
   ClipboardCheck,
+  ClipboardList,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -105,6 +106,12 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
           <Megaphone className="size-5" aria-hidden="true" />
           Annonces
         </NavLink>
+        {user?.role === 'student' && (
+          <NavLink to="/my-enrollments" onClick={onNavigate} className={navLinkClasses}>
+            <ClipboardList className="size-5" aria-hidden="true" />
+            Mes inscriptions
+          </NavLink>
+        )}
 
         {canManageCourses(user?.role) ? (
           <>
@@ -142,6 +149,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/users" onClick={onNavigate} className={navLinkClasses}>
               <Users className="size-5" aria-hidden="true" />
               Users
+            </NavLink>
+            <NavLink to="/enrollments" onClick={onNavigate} className={navLinkClasses}>
+              <ClipboardList className="size-5" aria-hidden="true" />
+              Inscriptions
             </NavLink>
           </>
         ) : null}

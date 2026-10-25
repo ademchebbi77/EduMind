@@ -25,7 +25,10 @@ import SessionFormPage from './pages/sessions/SessionFormPage'
 import SessionDetailPage from './pages/sessions/SessionDetailPage'
 import AnnouncementsPage from './pages/announcements/AnnouncementsPage'
 import AnnouncementFormPage from './pages/announcements/AnnouncementFormPage'
+import AnnouncementDetailPage from './pages/announcements/AnnouncementDetailPage'
 import CalendarPage from './pages/calendar/CalendarPage'
+import MyEnrollmentsPage from './pages/enrollments/MyEnrollmentsPage'
+import EnrollmentsAdminPage from './pages/enrollments/EnrollmentsAdminPage'
 
 const COURSE_MANAGER_ROLES = ['teacher', 'admin']
 const ADMIN_ROLES = ['admin']
@@ -132,6 +135,17 @@ export default function App() {
                 {/* Calendrier */}
                 <Route path="/calendar" element={<CalendarPage />} />
 
+                {/* Inscriptions */}
+                <Route path="/my-enrollments" element={<MyEnrollmentsPage />} />
+                <Route
+                  path="/enrollments"
+                  element={
+                    <RequireRole roles={ADMIN_ROLES}>
+                      <EnrollmentsAdminPage />
+                    </RequireRole>
+                  }
+                />
+
                 {/* Sessions en ligne */}
                 <Route path="/sessions" element={<SessionsPage />} />                <Route
                   path="/sessions/new"
@@ -161,6 +175,7 @@ export default function App() {
                     </RequireRole>
                   }
                 />
+                <Route path="/announcements/:announcementId" element={<AnnouncementDetailPage />} />
                 <Route
                   path="/announcements/:announcementId/edit"
                   element={

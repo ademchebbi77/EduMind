@@ -99,6 +99,9 @@ class SessionEnrollmentSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.full_name", read_only=True)
     student_email = serializers.CharField(source="student.email", read_only=True)
     session_title = serializers.CharField(source="session.title", read_only=True)
+    session_starts_at = serializers.DateTimeField(source="session.starts_at", read_only=True)
+    session_ends_at = serializers.DateTimeField(source="session.ends_at", read_only=True)
+    session_type = serializers.CharField(source="session.session_type", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
@@ -107,6 +110,9 @@ class SessionEnrollmentSerializer(serializers.ModelSerializer):
             "id",
             "session",
             "session_title",
+            "session_starts_at",
+            "session_ends_at",
+            "session_type",
             "student",
             "student_name",
             "student_email",
