@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, CalendarDays, FileQuestion, RotateCcw } from 'lucide-react'
-import { createSession, fetchSession, updateSession } from '../../api/sessions'
+import { createSession, fetchSession, updateSession, fetchBestTimeSlots } from '../../api/sessions'
 import { fetchUsers } from '../../api/users'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
@@ -12,6 +12,7 @@ import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select, Textarea } from '../../components/ui/Field'
 import { PageLoader } from '../../components/ui/Skeleton'
+import { BestTimePanel } from '../../components/sessions/BestTimePanel'
 
 export default function SessionFormPage() {
   const { sessionId } = useParams()
@@ -46,6 +47,9 @@ export default function SessionFormPage() {
   const [formError, setFormError] = useState('')
   const [saving, setSaving]     = useState(false)
 
+  const [slots, setSlots]               = useState([])
+  const [slotsLoading, setSlotsLoading] = useState(true)
+
   const requestKey = `${sessionId ?? 'new'}:${reload}`
 
   // Charger les teachers pour l'admin (sessions de type formation)
@@ -55,6 +59,22 @@ export default function SessionFormPage() {
       .then((data) => setTeachers(data.results || []))
       .catch(() => {})
   }, [isAdmin])
+
+  // Créneaux historiquement les plus remplis (calcul local)
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchBestTimeSlots({ signal: controller.signal })
+      .then((data) => {
+        setSlots(data.slots || [])
+        setSlotsLoading(false)
+      })
+      .catch((err) => {
+        if (isCanceled(err)) return
+        setSlots([])
+        setSlotsLoading(false)
+      })
+    return () => controller.abort()
+  }, [])
 
   // Charger la session en mode édition
   useEffect(() => {
@@ -134,6 +154,20 @@ export default function SessionFormPage() {
   function updateField(name, value) {
     setValues((v) => ({ ...v, [name]: value }))
     setErrors((e) => ({ ...e, [name]: undefined }))
+  }
+
+  function applySlot(slot) {
+    const now = new Date()
+    let daysAhead = (slot.weekday - ((now.getDay() + 6) % 7) + 7) % 7
+    if (daysAhead === 0 && now.getHours() >= slot.hour) daysAhead = 7
+    const target = new Date(now)
+    target.setDate(now.getDate() + daysAhead)
+    const pad = (value) => String(value).padStart(2, '0')
+    updateDateField(
+      'date',
+      `${target.getFullYear()}-${pad(target.getMonth() + 1)}-${pad(target.getDate())}`,
+    )
+    updateDateField('start_time', `${pad(slot.hour)}:00`)
   }
 
   function toggleTeacher(id) {
@@ -413,6 +447,13 @@ export default function SessionFormPage() {
           </div>
 
           <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+            <BestTimePanel
+              slots={slots}
+              loading={slotsLoading}
+              onSelect={applySlot}
+              disabled={saving}
+            />
+
             {isAdmin && (
               <Card>
                 <h2 className="text-xl font-semibold text-ink">Statut</h2>

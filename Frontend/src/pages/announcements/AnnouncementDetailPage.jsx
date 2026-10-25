@@ -8,6 +8,7 @@ import { fetchAnnouncement, deleteAnnouncement, enrollInAnnouncement } from '../
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
+import { categoryMeta, categoryTitle } from '../../lib/categories'
 import { formatDate } from '../../lib/format'
 import { urgencyBadge, urgencyScore } from '../../lib/urgency'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
@@ -180,6 +181,7 @@ export default function AnnouncementDetailPage() {
 
   const urgency = urgencyBadge(announcement.urgency)
   const score = urgencyScore(announcement.urgency)
+  const category = categoryMeta(announcement.category)
 
   return (
     <div className="space-y-6">
@@ -196,6 +198,11 @@ export default function AnnouncementDetailPage() {
               <Badge variant={AUDIENCE_VARIANTS[announcement.target_audience] || 'default'}>
                 {AUDIENCE_LABELS[announcement.target_audience] || announcement.target_audience_display}
               </Badge>
+              {category && category.key !== 'autre' && (
+                <span title={categoryTitle(announcement.category)}>
+                  <Badge variant={category.variant}>{category.label}</Badge>
+                </span>
+              )}
               {announcement.is_pinned && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-gold/10 px-2 py-0.5 text-xs font-medium text-gold">
                   <Pin className="size-3" aria-hidden="true" />
@@ -372,6 +379,23 @@ export default function AnnouncementDetailPage() {
                 <Badge variant={AUDIENCE_VARIANTS[announcement.target_audience] || 'default'}>
                   {AUDIENCE_LABELS[announcement.target_audience] || announcement.target_audience_display}
                 </Badge>
+              </dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-3">
+              <dt className="text-slate-500">Catégorie</dt>
+              <dd>
+                {category ? (
+                  <span title={categoryTitle(announcement.category)}>
+                    <Badge variant={category.variant}>
+                      {category.label}
+                      {announcement.category?.manual
+                        ? ' · Manuelle'
+                        : announcement.category?.confidence > 0 && ` · ${announcement.category.confidence} %`}
+                    </Badge>
+                  </span>
+                ) : (
+                  <span className="text-slate-400">—</span>
+                )}
               </dd>
             </div>
             <div className="flex items-center justify-between gap-4 py-3">

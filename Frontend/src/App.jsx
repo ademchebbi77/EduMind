@@ -29,6 +29,7 @@ import AnnouncementDetailPage from './pages/announcements/AnnouncementDetailPage
 import CalendarPage from './pages/calendar/CalendarPage'
 import MyEnrollmentsPage from './pages/enrollments/MyEnrollmentsPage'
 import EnrollmentsAdminPage from './pages/enrollments/EnrollmentsAdminPage'
+import AtRiskStudentsPage from './pages/risk/AtRiskStudentsPage'
 
 const COURSE_MANAGER_ROLES = ['teacher', 'admin']
 const ADMIN_ROLES = ['admin']
@@ -161,6 +162,16 @@ export default function App() {
                   element={
                     <RequireRole roles={COURSE_MANAGER_ROLES}>
                       <SessionFormPage />
+                    </RequireRole>
+                  }
+                />
+
+                {/* Pilotage pédagogique */}
+                <Route
+                  path="/at-risk"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <AtRiskStudentsPage />
                     </RequireRole>
                   }
                 />

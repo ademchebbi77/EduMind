@@ -73,4 +73,22 @@ describe('AnnouncementCard', () => {
 
     expect(screen.getByText('2 / 2 — complet')).toBeInTheDocument()
   })
+
+  it('shows the detected category with its keywords', () => {
+    renderCard(
+      makeAnnouncement(undefined, {
+        category: {
+          key: 'formation',
+          label: 'Formation',
+          confidence: 82,
+          keywords: ['formation', 'atelier'],
+        },
+      }),
+    )
+
+    expect(screen.getByText('Formation')).toBeInTheDocument()
+    expect(
+      screen.getByTitle('Formation · mots-clés : formation, atelier'),
+    ).toBeInTheDocument()
+  })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus, RotateCcw, SearchX, AlertTriangle, Sparkles, Video } from 'lucide-react'
-import { fetchSessions, deleteSession, fetchRecommendedSessions } from '../../api/sessions'
+import { fetchSessions, deleteSession, fetchRecommendedSessions, fetchEnrollmentForecast } from '../../api/sessions'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
@@ -13,6 +13,7 @@ import { Input, Select } from '../../components/ui/Field'
 import { CardSkeleton } from '../../components/ui/Skeleton'
 import { SessionCard } from '../../components/sessions/SessionCard'
 import { DeleteSessionModal } from '../../components/sessions/DeleteSessionModal'
+import { ForecastPanel } from '../../components/sessions/ForecastPanel'
 
 const EMPTY_RESULTS = { count: 0, next: null, previous: null, results: [] }
 
@@ -38,6 +39,9 @@ export default function SessionsPage() {
 
   const [recommended, setRecommended]           = useState([])
   const [recommendedFailed, setRecommendedFailed] = useState(false)
+
+  const [forecast, setForecast] = useState([])
+  const [forecastLoading, setForecastLoading] = useState(Boolean(canCreate))
 
   const debouncedSearch = useDebouncedValue(search)
 
@@ -83,6 +87,22 @@ export default function SessionsPage() {
     return () => controller.abort()
   }, [isStudent, reload])
 
+  useEffect(() => {
+    if (!canCreate) return undefined
+    const controller = new AbortController()
+    fetchEnrollmentForecast({ limit: 3 }, { signal: controller.signal })
+      .then((items) => {
+        setForecast(items)
+        setForecastLoading(false)
+      })
+      .catch((err) => {
+        if (isCanceled(err)) return
+        setForecast([])
+        setForecastLoading(false)
+      })
+    return () => controller.abort()
+  }, [canCreate, reload])
+
   const results    = data.results ?? []
   const hasFilters = Boolean(search.trim() || type || statusFilter)
   const showSkeleton = loading && results.length === 0
@@ -125,6 +145,10 @@ export default function SessionsPage() {
           </LinkButton>
         )}
       </header>
+
+      {canCreate && (
+        <ForecastPanel items={forecast} loading={forecastLoading} />
+      )}
 
       {isStudent && recommended.length > 0 && (
         <section aria-labelledby="recommended-heading" className="space-y-4">

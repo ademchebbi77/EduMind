@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .categorization import categorize
 from .models import Announcement, AnnouncementEnrollment
 from .urgency import compute_urgency
 
@@ -18,6 +19,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     seats_remaining  = serializers.SerializerMethodField()
     is_enrolled      = serializers.SerializerMethodField()
     urgency          = serializers.SerializerMethodField()
+    category         = serializers.SerializerMethodField()
 
     class Meta:
         model = Announcement
@@ -27,6 +29,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "content",
             "target_audience",
             "target_audience_display",
+            "category_override",
             "related_session",
             "related_session_title",
             "author",
@@ -42,6 +45,7 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "seats_remaining",
             "is_enrolled",
             "urgency",
+            "category",
             "created_at",
             "updated_at",
         )
@@ -79,6 +83,16 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             "level": urgency.level,
             "label": urgency.label,
             "reasons": list(urgency.reasons),
+        }
+
+    def get_category(self, obj):
+        category = categorize(obj)
+        return {
+            "key": category.key,
+            "label": category.label,
+            "confidence": category.confidence,
+            "keywords": list(category.matched_keywords),
+            "manual": bool(obj.category_override),
         }
 
     def get_is_enrolled(self, obj):

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { CalendarDays, Gauge, Megaphone, Pencil, Pin, Trash2 } from 'lucide-react'
 import { Badge } from '../ui/Badge'
+import { categoryMeta, categoryTitle } from '../../lib/categories'
 import { formatDate } from '../../lib/format'
 import { urgencyBadge, urgencyScore } from '../../lib/urgency'
 
@@ -19,6 +20,7 @@ const AUDIENCE_LABELS = {
 export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
   const urgency = urgencyBadge(announcement.urgency)
   const score = urgencyScore(announcement.urgency)
+  const category = categoryMeta(announcement.category)
 
   return (
     <article className="surface relative flex flex-col gap-3 overflow-hidden p-5 transition duration-200 hover:border-slate-300 hover:shadow-sm">
@@ -39,6 +41,11 @@ export function AnnouncementCard({ announcement, canEdit = false, onDelete }) {
           )}
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {category && category.key !== 'autre' && (
+            <span title={categoryTitle(announcement.category)}>
+              <Badge variant={category.variant}>{category.label}</Badge>
+            </span>
+          )}
           {urgency && (
             <span title={urgency.title}>
               <Badge variant={urgency.variant}>{urgency.label}</Badge>

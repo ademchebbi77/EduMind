@@ -2,12 +2,14 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.models import User
 from accounts.permissions import IsAdminRole
 
+from .categorization import CATEGORY_KEYS, CATEGORY_LABELS, categorize
 from .models import Announcement, AnnouncementEnrollment
 from .permissions import CanManageAnnouncement
 from .serializers import AnnouncementEnrollmentSerializer, AnnouncementSerializer
@@ -41,7 +43,26 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
                     Announcement.TargetAudience.TEACHERS,
                 ]
             )
+
+        category = self.request.query_params.get("category")
+        if category:
+            if category not in CATEGORY_KEYS:
+                raise ValidationError({"category": "Catégorie inconnue."})
+            matching_ids = [
+                announcement.pk
+                for announcement in queryset
+                if categorize(announcement).key == category
+            ]
+            queryset = queryset.filter(pk__in=matching_ids)
+
         return queryset
+
+    @action(detail=False, methods=["get"], url_path="categories")
+    def categories(self, request):
+        """Liste les catégories disponibles (calculées localement)."""
+        return Response(
+            [{"key": key, "label": label} for key, label in CATEGORY_LABELS.items()]
+        )
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)

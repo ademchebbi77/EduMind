@@ -12,6 +12,7 @@ import {
   Menu,
   Pencil,
   Plus,
+  ShieldAlert,
   Users,
   Video,
   X,
@@ -137,6 +138,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/announcements/new" onClick={onNavigate} className={navLinkClasses}>
               <Megaphone className="size-5" aria-hidden="true" />
               Nouvelle annonce
+            </NavLink>
+            <NavLink to="/at-risk" onClick={onNavigate} className={navLinkClasses}>
+              <ShieldAlert className="size-5" aria-hidden="true" />
+              Étudiants à risque
             </NavLink>
           </>
         ) : null}

@@ -6,6 +6,7 @@ import { fetchSessions } from '../../api/sessions'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { firstFieldError, isCanceled, normalizeApiError } from '../../lib/api'
+import { ANNOUNCEMENT_CATEGORIES } from '../../lib/categories'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -30,6 +31,7 @@ export default function AnnouncementFormPage() {
     title:           '',
     content:         '',
     target_audience: 'all',
+    category_override: '',
     related_session: '',
     is_pinned:       false,
     event_date:      '',   // YYYY-MM-DD
@@ -61,6 +63,7 @@ export default function AnnouncementFormPage() {
           title:           payload.title,
           content:         payload.content,
           target_audience: payload.target_audience,
+          category_override: payload.category_override || '',
           related_session: payload.related_session || '',
           is_pinned:       payload.is_pinned,
           event_date:      payload.event_date || '',
@@ -129,6 +132,7 @@ export default function AnnouncementFormPage() {
       title:           values.title.trim(),
       content:         buildContent(),
       target_audience: values.target_audience,
+      category_override: values.category_override,
       related_session: values.related_session || null,
       is_pinned:       values.is_pinned,
       event_date:      values.event_date || null,
@@ -150,9 +154,10 @@ export default function AnnouncementFormPage() {
     } catch (err) {
       const error = normalizeApiError(err, 'Enregistrement échoué.')
       const fieldErrs = {
-        title:    firstFieldError(error.fields, 'title'),
-        content:  firstFieldError(error.fields, 'content'),
-        capacity: firstFieldError(error.fields, 'capacity'),
+        title:             firstFieldError(error.fields, 'title'),
+        content:           firstFieldError(error.fields, 'content'),
+        category_override: firstFieldError(error.fields, 'category_override'),
+        capacity:          firstFieldError(error.fields, 'capacity'),
       }
       setErrors(fieldErrs)
       if (!Object.values(fieldErrs).some(Boolean)) {
@@ -341,6 +346,21 @@ export default function AnnouncementFormPage() {
                 <option value="all">Tous les utilisateurs</option>
                 <option value="students">Étudiants seulement</option>
                 <option value="teachers">Enseignants seulement</option>
+              </Select>
+
+              <Select
+                label="Catégorie"
+                name="category_override"
+                value={values.category_override}
+                onChange={(e) => updateField('category_override', e.target.value)}
+                error={errors.category_override}
+                hint="Laissez sur Automatique pour une détection par mots-clés."
+                disabled={saving}
+              >
+                <option value="">Automatique (détection)</option>
+                {ANNOUNCEMENT_CATEGORIES.map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
               </Select>
 
               <Input
