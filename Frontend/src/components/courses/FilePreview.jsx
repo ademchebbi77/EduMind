@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, Headphones, X } from 'lucide-react'
+import { ExternalLink, FileText, Headphones, Video, X } from 'lucide-react'
 import { formatBytes } from '../../lib/format'
 
 export function FilePreview({
@@ -11,17 +11,20 @@ export function FilePreview({
   subtitle,
 }) {
   const isAudio = kind === 'audio'
-  const Icon = isAudio ? Headphones : FileText
+  const isVideo = kind === 'video'
+  const Icon = isVideo ? Video : isAudio ? Headphones : FileText
+
+  const tone = isVideo
+    ? 'bg-clay/10 text-clay ring-clay/15'
+    : isAudio
+      ? 'bg-sage/10 text-sage ring-sage/15'
+      : 'bg-brand/10 text-brand-strong ring-brand/15'
 
   return (
     <div className="rounded-2xl border border-line bg-paper p-4">
       <div className="flex items-start gap-3">
         <span
-          className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${
-            isAudio
-              ? 'bg-sage/10 text-sage ring-sage/15'
-              : 'bg-brand/10 text-brand-strong ring-brand/15'
-          }`}
+          className={`inline-flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${tone}`}
         >
           <Icon className="size-5" aria-hidden="true" />
         </span>
@@ -54,11 +57,29 @@ export function FilePreview({
             src={url}
             aria-label={`Audio preview: ${fileName}`}
             className="mt-3 w-full"
-          />
+          >
+            Your browser does not support audio playback.
+          </audio>
         </>
       ) : null}
 
-      {url && !isAudio ? (
+      {url && isVideo ? (
+        <>
+          {/* Uploaded videos have no caption track; the direct file link remains available. */}
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video
+            controls
+            preload="metadata"
+            src={url}
+            aria-label={`Video preview: ${fileName}`}
+            className="mt-3 w-full rounded-xl border border-line bg-ink"
+          >
+            Your browser does not support video playback.
+          </video>
+        </>
+      ) : null}
+
+      {url && !isAudio && !isVideo ? (
         <iframe
           src={url}
           title={`PDF preview: ${fileName}`}

@@ -47,6 +47,18 @@ export function formatBytes(bytes) {
   return `${rounded} ${units[index]}`
 }
 
+export function formatDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
+  const total = Math.round(seconds)
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const remaining = total % 60
+  if (hours) {
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(remaining).padStart(2, '0')}`
+  }
+  return `${minutes}:${String(remaining).padStart(2, '0')}`
+}
+
 export function fileExtension(name = '') {
   const index = name.lastIndexOf('.')
   return index === -1 ? '' : name.slice(index + 1).toLowerCase()

@@ -5,6 +5,7 @@ import {
   Calendar,
   ClipboardCheck,
   ClipboardList,
+  GraduationCap,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -90,6 +91,12 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
           <BookOpen className="size-5" aria-hidden="true" />
           Courses
         </NavLink>
+        {user?.role === 'student' && (
+          <NavLink to="/my-courses" onClick={onNavigate} className={navLinkClasses}>
+            <GraduationCap className="size-5" aria-hidden="true" />
+            My courses
+          </NavLink>
+        )}
         <NavLink to="/assessments" onClick={onNavigate} className={navLinkClasses}>
           <ClipboardCheck className="size-5" aria-hidden="true" />
           Quizzes &amp; exercises
@@ -121,6 +128,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/courses/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />
               Add a course
+            </NavLink>
+            <NavLink to="/course-enrollments" onClick={onNavigate} className={navLinkClasses}>
+              <ClipboardList className="size-5" aria-hidden="true" />
+              Course enrollments
             </NavLink>
             <NavLink to="/quizzes/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />

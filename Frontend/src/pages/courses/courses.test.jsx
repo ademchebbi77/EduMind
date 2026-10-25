@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,16 +10,31 @@ import CourseFormPage from './CourseFormPage'
 const mocks = vi.hoisted(() => ({
   addToast: vi.fn(),
   fetchCourses: vi.fn(),
+  fetchMyCourses: vi.fn(),
+  fetchCategories: vi.fn(),
   fetchCourse: vi.fn(),
   createCourse: vi.fn(),
   updateCourse: vi.fn(),
+  updateCourseFields: vi.fn(),
   deleteCourse: vi.fn(),
+  enrollInCourse: vi.fn(),
+  unenrollFromCourse: vi.fn(),
+  fetchCourseProgress: vi.fn(),
+  updateCourseProgress: vi.fn(),
+  fetchCourseTranscript: vi.fn(),
+  generateCourseTranscript: vi.fn(),
   config: {
     max_upload_size_mb: 50,
     max_upload_size_bytes: 50 * 1024 * 1024,
-    allowed_extensions: ['pdf', 'mp3', 'wav', 'm4a', 'ogg'],
+    max_video_upload_size_mb: 500,
+    max_video_upload_size_bytes: 500 * 1024 * 1024,
+    allowed_extensions: ['pdf', 'mp3', 'wav', 'm4a', 'ogg', 'mp4', 'webm', 'avi'],
     pdf_extensions: ['pdf'],
     audio_extensions: ['mp3', 'wav', 'm4a', 'ogg'],
+    video_extensions: ['mp4', 'webm', 'avi'],
+    thumbnail_extensions: ['jpeg', 'jpg', 'png', 'webp'],
+    thumbnail_max_size_mb: 2,
+    thumbnail_max_size_bytes: 2 * 1024 * 1024,
   },
 }))
 
@@ -31,10 +46,19 @@ vi.mock('../../context/ToastContext', () => ({
 }))
 vi.mock('../../api/courses', () => ({
   fetchCourses: mocks.fetchCourses,
+  fetchMyCourses: mocks.fetchMyCourses,
+  fetchCategories: mocks.fetchCategories,
   fetchCourse: mocks.fetchCourse,
   createCourse: mocks.createCourse,
   updateCourse: mocks.updateCourse,
+  updateCourseFields: mocks.updateCourseFields,
   deleteCourse: mocks.deleteCourse,
+  enrollInCourse: mocks.enrollInCourse,
+  unenrollFromCourse: mocks.unenrollFromCourse,
+  fetchCourseProgress: mocks.fetchCourseProgress,
+  updateCourseProgress: mocks.updateCourseProgress,
+  fetchCourseTranscript: mocks.fetchCourseTranscript,
+  generateCourseTranscript: mocks.generateCourseTranscript,
 }))
 vi.mock('../../hooks/useAppConfig', () => ({
   useAppConfig: () => ({
@@ -72,8 +96,19 @@ const OWNED_COURSE = {
   file: null,
   file_url: '/api/courses/1/file/',
   download_url: '/api/courses/1/download/',
+  video_url: '',
+  thumbnail_url: null,
+  category: null,
+  category_name: null,
+  category_slug: null,
+  tags: [],
   owner: 7,
   owner_name: 'Thomas Teacher',
+  max_students: null,
+  enrolled_count: 0,
+  is_full: false,
+  is_enrolled: false,
+  can_enroll: false,
   created_at: '2026-10-01T10:00:00Z',
   updated_at: '2026-10-02T10:00:00Z',
 }
@@ -88,6 +123,30 @@ const OTHER_COURSE = {
   download_url: '/api/courses/2/download/',
   owner: 8,
   owner_name: 'Camille Teacher',
+}
+
+const OWNED_VIDEO_COURSE = {
+  ...OWNED_COURSE,
+  type: 'video',
+  type_display: 'Video',
+  video_url: '',
+}
+
+const EMPTY_TRANSCRIPT = {
+  status: 'none',
+  status_display: 'Not generated',
+  stage: '',
+  stage_display: '',
+  progress: 0,
+  language: '',
+  model_name: '',
+  text: '',
+  formatted_by_ai: false,
+  segment_count: 0,
+  error_message: '',
+  started_at: null,
+  completed_at: null,
+  updated_at: null,
 }
 
 function renderRoute(initialEntry) {
@@ -118,7 +177,65 @@ beforeEach(() => {
     previous: null,
     results: [OWNED_COURSE, OTHER_COURSE],
   })
+  mocks.fetchMyCourses.mockResolvedValue({
+    count: 1,
+    next: null,
+    previous: null,
+    results: [OWNED_COURSE],
+  })
+  mocks.fetchCategories.mockResolvedValue({
+    count: 1,
+    next: null,
+    previous: null,
+    results: [
+      {
+        id: 3,
+        name: 'Science',
+        slug: 'science',
+        description: 'Scientific courses.',
+        created_at: '2026-10-01T10:00:00Z',
+      },
+    ],
+  })
   mocks.fetchCourse.mockResolvedValue(OWNED_COURSE)
+  mocks.fetchCourseProgress.mockResolvedValue({
+    progress: 0,
+    completed: false,
+    completed_at: null,
+    has_opened_material: false,
+    video_duration_seconds: 0,
+    video_watched_seconds: 0,
+    last_position_seconds: 0,
+    total_pages: 1,
+    pages_viewed: 0,
+    first_viewed_at: null,
+    last_viewed_at: null,
+  })
+  mocks.fetchCourseTranscript.mockResolvedValue(EMPTY_TRANSCRIPT)
+  mocks.generateCourseTranscript.mockResolvedValue({
+    ...EMPTY_TRANSCRIPT,
+    status: 'queued',
+    status_display: 'Queued',
+    stage: 'queued',
+    stage_display: 'Queued',
+    language: 'en',
+  })
+  mocks.updateCourseProgress.mockImplementation((courseId, payload) =>
+    Promise.resolve({
+      progress: 0,
+      completed: false,
+      completed_at: null,
+      has_opened_material: true,
+      video_duration_seconds: 0,
+      video_watched_seconds: 0,
+      last_position_seconds: 0,
+      total_pages: 1,
+      pages_viewed: 0,
+      first_viewed_at: null,
+      last_viewed_at: null,
+      ...payload,
+    }),
+  )
 })
 
 describe('CoursesPage', () => {
@@ -160,6 +277,49 @@ describe('CoursesPage', () => {
         expect.anything(),
       ),
     )
+  })
+
+  it('filters the catalogue by category and tags', async () => {
+    const user = userEvent.setup()
+    renderRoute('/courses')
+
+    await screen.findByRole('heading', { name: 'My course' })
+    await user.selectOptions(screen.getByLabelText('Category'), 'science')
+    await user.type(screen.getByLabelText('Tags'), 'physics')
+
+    await waitFor(() =>
+      expect(mocks.fetchCourses).toHaveBeenLastCalledWith(
+        expect.objectContaining({ category: 'science', tags: 'physics' }),
+        expect.anything(),
+      ),
+    )
+  })
+
+  it('uses the my-courses endpoint for students who enable My courses', async () => {
+    const user = userEvent.setup()
+    signInAs(STUDENT)
+    renderRoute('/courses')
+
+    await screen.findByRole('heading', { name: 'My course' })
+    await user.click(screen.getByLabelText('My courses'))
+
+    await waitFor(() => expect(mocks.fetchMyCourses).toHaveBeenCalled())
+  })
+
+  it('enrolls a student from the catalogue', async () => {
+    const user = userEvent.setup()
+    signInAs(STUDENT)
+    mocks.enrollInCourse.mockResolvedValue({ id: 11 })
+    renderRoute('/courses')
+
+    await screen.findByRole('heading', { name: 'My course' })
+    await user.click(screen.getAllByRole('button', { name: 'Enroll' })[0])
+
+    await waitFor(() => expect(mocks.enrollInCourse).toHaveBeenCalledWith(1))
+    expect(mocks.addToast).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'success' }),
+    )
+    expect(await screen.findByRole('button', { name: /leave course/i })).toBeInTheDocument()
   })
 
   it('deletes a course after confirmation', async () => {
@@ -216,6 +376,273 @@ describe('CourseDetailPage', () => {
     expect(screen.queryByRole('button', { name: /delete/i })).toBeNull()
   })
 
+  it('shows tracked page progress and reports page navigation for enrolled students', async () => {
+    const user = userEvent.setup()
+    signInAs(STUDENT)
+    mocks.fetchCourse.mockResolvedValue({
+      ...OWNED_COURSE,
+      is_enrolled: true,
+      can_enroll: false,
+      enrolled_count: 1,
+    })
+    mocks.fetchCourseProgress.mockResolvedValue({
+      progress: 40,
+      completed: false,
+      completed_at: null,
+      has_opened_material: true,
+      video_duration_seconds: 0,
+      video_watched_seconds: 0,
+      last_position_seconds: 0,
+      total_pages: 10,
+      pages_viewed: 4,
+      first_viewed_at: '2026-10-20T10:00:00Z',
+      last_viewed_at: '2026-10-25T10:00:00Z',
+    })
+    mocks.updateCourseProgress.mockResolvedValue({
+      progress: 50,
+      completed: false,
+      completed_at: null,
+      has_opened_material: true,
+      video_duration_seconds: 0,
+      video_watched_seconds: 0,
+      last_position_seconds: 0,
+      total_pages: 10,
+      pages_viewed: 5,
+      first_viewed_at: '2026-10-20T10:00:00Z',
+      last_viewed_at: '2026-10-25T10:05:00Z',
+    })
+
+    renderRoute('/courses/1')
+
+    expect(
+      await screen.findByRole('heading', { name: 'Your progress' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('4 of 10 pages viewed')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '40',
+    )
+    expect(screen.getByText('Page 1 of 10')).toBeInTheDocument()
+    expect(mocks.updateCourseProgress).not.toHaveBeenCalled()
+
+    const next = screen.getByRole('button', { name: 'Next page' })
+    for (let index = 0; index < 4; index += 1) {
+      await user.click(next)
+    }
+
+    await waitFor(() =>
+      expect(mocks.updateCourseProgress).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ pages_viewed: 5 }),
+      ),
+    )
+    expect(await screen.findByText('5 of 10 pages viewed')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute(
+      'aria-valuenow',
+      '50',
+    )
+  })
+
+  it('tracks video playback instead of completing the course on open', async () => {
+    signInAs(STUDENT)
+    mocks.fetchCourse.mockResolvedValue({
+      ...OWNED_COURSE,
+      type: 'video',
+      type_display: 'Video',
+      is_enrolled: true,
+      can_enroll: false,
+      enrolled_count: 1,
+    })
+    mocks.fetchCourseProgress.mockResolvedValue({
+      progress: 0,
+      completed: false,
+      completed_at: null,
+      has_opened_material: false,
+      video_duration_seconds: 0,
+      video_watched_seconds: 0,
+      last_position_seconds: 0,
+      total_pages: 0,
+      pages_viewed: 0,
+      first_viewed_at: null,
+      last_viewed_at: null,
+    })
+    mocks.updateCourseProgress.mockImplementation((courseId, payload) => {
+      const duration = payload.video_duration_seconds ?? 0
+      const watched = payload.video_watched_seconds ?? 0
+      return Promise.resolve({
+        progress: duration ? Math.round((watched / duration) * 100) : 0,
+        completed: false,
+        completed_at: null,
+        has_opened_material: true,
+        video_duration_seconds: 0,
+        video_watched_seconds: 0,
+        last_position_seconds: 0,
+        total_pages: 0,
+        pages_viewed: 0,
+        first_viewed_at: null,
+        last_viewed_at: null,
+        ...payload,
+      })
+    })
+
+    renderRoute('/courses/1')
+
+    const video = await screen.findByLabelText('Video: My course')
+    await waitFor(() => expect(mocks.fetchCourseProgress).toHaveBeenCalled())
+    expect(mocks.updateCourseProgress).not.toHaveBeenCalled()
+
+    Object.defineProperty(video, 'duration', {
+      configurable: true,
+      value: 120,
+    })
+    let currentTime = 0
+    Object.defineProperty(video, 'currentTime', {
+      configurable: true,
+      get: () => currentTime,
+      set: (value) => {
+        currentTime = value
+      },
+    })
+    Object.defineProperty(video, 'paused', {
+      configurable: true,
+      get: () => false,
+    })
+
+    fireEvent.loadedMetadata(video)
+
+    await waitFor(() =>
+      expect(mocks.updateCourseProgress).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          video_duration_seconds: 120,
+          video_watched_seconds: 0,
+        }),
+      ),
+    )
+
+    for (let second = 1; second <= 10; second += 1) {
+      currentTime = second
+      fireEvent.timeUpdate(video)
+    }
+
+    Object.defineProperty(video, 'paused', {
+      configurable: true,
+      get: () => true,
+    })
+    fireEvent.pause(video)
+
+    await waitFor(() =>
+      expect(mocks.updateCourseProgress).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({
+          video_duration_seconds: 120,
+          video_watched_seconds: 10,
+          last_position_seconds: 10,
+        }),
+      ),
+    )
+  })
+
+  it('lets the course owner generate a video transcript with progress', async () => {
+    const user = userEvent.setup()
+    mocks.fetchCourse.mockResolvedValue(OWNED_VIDEO_COURSE)
+    mocks.generateCourseTranscript.mockResolvedValue({
+      ...EMPTY_TRANSCRIPT,
+      status: 'processing',
+      status_display: 'Processing',
+      stage: 'transcribing',
+      stage_display: 'Transcribing audio',
+      progress: 40,
+      language: 'en',
+      segment_count: 4,
+    })
+
+    renderRoute('/courses/1')
+
+    const language = await screen.findByRole('combobox', {
+      name: 'Spoken language',
+    })
+    await user.selectOptions(language, 'fr')
+    await user.click(
+      screen.getByRole('button', { name: /generate transcript/i }),
+    )
+
+    expect(mocks.generateCourseTranscript).toHaveBeenCalledWith(1, {
+      language: 'fr',
+    })
+    expect(await screen.findByText('Transcribing the audio…')).toBeInTheDocument()
+    expect(
+      screen.getByRole('progressbar', {
+        name: 'Transcript generation progress',
+      }),
+    ).toHaveAttribute('aria-valuenow', '40')
+  })
+
+  it('shows a generated transcript with timestamps to enrolled students', async () => {
+    signInAs(STUDENT)
+    mocks.fetchCourse.mockResolvedValue({
+      ...OWNED_VIDEO_COURSE,
+      is_enrolled: true,
+      can_enroll: false,
+      enrolled_count: 1,
+    })
+    mocks.fetchCourseTranscript.mockResolvedValue({
+      ...EMPTY_TRANSCRIPT,
+      status: 'completed',
+      status_display: 'Completed',
+      stage: 'done',
+      stage_display: 'Complete',
+      progress: 100,
+      language: 'en',
+      text: '[00:00] Welcome to the lesson.\n\n[02:00] Here is the next part.',
+      formatted_by_ai: true,
+      completed_at: '2026-10-25T10:00:00Z',
+    })
+
+    renderRoute('/courses/1')
+
+    expect(await screen.findByText('Welcome to the lesson.')).toBeInTheDocument()
+    expect(screen.getByText('00:00')).toBeInTheDocument()
+    expect(screen.getByText('Here is the next part.')).toBeInTheDocument()
+    expect(screen.getByText('02:00')).toBeInTheDocument()
+    expect(screen.getByText('AI formatted')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /generate transcript/i }),
+    ).toBeNull()
+  })
+
+  it('offers a retry when transcript generation failed', async () => {
+    mocks.fetchCourse.mockResolvedValue(OWNED_VIDEO_COURSE)
+    mocks.fetchCourseTranscript.mockResolvedValue({
+      ...EMPTY_TRANSCRIPT,
+      status: 'failed',
+      status_display: 'Failed',
+      stage: 'failed',
+      stage_display: 'Failed',
+      error_message: 'The audio track could not be extracted.',
+    })
+
+    renderRoute('/courses/1')
+
+    expect(
+      await screen.findByText('The audio track could not be extracted.'),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument()
+  })
+
+  it('does not show transcript controls to students who are not enrolled', async () => {
+    signInAs(STUDENT)
+    mocks.fetchCourse.mockResolvedValue(OWNED_VIDEO_COURSE)
+
+    renderRoute('/courses/1')
+
+    await screen.findByRole('heading', { name: 'My course' })
+    expect(
+      screen.queryByRole('heading', { name: 'Video transcript' }),
+    ).toBeNull()
+    expect(mocks.fetchCourseTranscript).not.toHaveBeenCalled()
+  })
+
   it('shows a dedicated state for a missing course', async () => {
     mocks.fetchCourse.mockRejectedValue({
       isAxiosError: true,
@@ -242,7 +669,7 @@ describe('CourseFormPage', () => {
     await user.click(await screen.findByRole('button', { name: /publish course/i }))
 
     expect(screen.getByText('Enter the course title.')).toBeInTheDocument()
-    expect(screen.getByText('Select a PDF or audio file.')).toBeInTheDocument()
+    expect(screen.getByText('Select a file or provide a video link.')).toBeInTheDocument()
     expect(mocks.createCourse).not.toHaveBeenCalled()
   })
 
@@ -265,8 +692,24 @@ describe('CourseFormPage', () => {
     expect(screen.getByText(/maximum size of 1 MB/i)).toBeInTheDocument()
   })
 
-  it('publishes a course and opens its detail page', async () => {
+  it('rejects a non-supported video URL', async () => {
     const user = userEvent.setup()
+    renderRoute('/courses/new')
+
+    await user.type(await screen.findByLabelText(/course title/i), 'Video course')
+    await user.type(
+      screen.getByLabelText(/video link/i),
+      'https://example.com/watch?v=123',
+    )
+    await user.click(screen.getByRole('button', { name: /publish course/i }))
+
+    expect(
+      screen.getByText('Only YouTube and Vimeo links are supported.'),
+    ).toBeInTheDocument()
+    expect(mocks.createCourse).not.toHaveBeenCalled()
+  })
+
+  it('publishes a course and opens its detail page', async () => {    const user = userEvent.setup()
     const saved = { ...OWNED_COURSE, id: 42, title: 'New course' }
     mocks.createCourse.mockResolvedValue(saved)
     mocks.fetchCourse.mockResolvedValue(saved)

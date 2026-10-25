@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import User
-from courses.models import Course
+from courses.models import Course, CourseProgress, Enrollment
 
 from .utils import (
     M4A_BYTES,
@@ -93,3 +93,93 @@ class CourseModelTests(TemporaryMediaMixin, TestCase):
         course = create_course(self.teacher, filename="audio.wav")
 
         self.assertTrue(stored_bytes(course).startswith(b"RIFF"))
+
+
+class CourseProgressModelTests(TemporaryMediaMixin, TestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(
+            email="teacher@example.com",
+            password="StrongPass123!",
+            role=User.Role.TEACHER,
+        )
+        self.student = User.objects.create_user(
+            email="student@example.com",
+            password="StrongPass123!",
+            role=User.Role.STUDENT,
+        )
+
+    def _progress(self, course):
+        enrollment = Enrollment.objects.create(
+            course=course, student=self.student
+        )
+        return CourseProgress.objects.create(enrollment=enrollment)
+
+    def test_video_percentage_uses_watched_seconds(self):
+        course = create_course(
+            self.teacher, title="Video", filename="lesson.mp4"
+        )
+        progress = self._progress(course)
+        progress.video_duration_seconds = 200
+        progress.video_watched_seconds = 50
+
+        self.assertEqual(progress.percentage, 25)
+
+    def test_audio_percentage_uses_watched_seconds(self):
+        course = create_course(
+            self.teacher, title="Audio", filename="lesson.wav"
+        )
+        progress = self._progress(course)
+        progress.video_duration_seconds = 80
+        progress.video_watched_seconds = 20
+
+        self.assertEqual(progress.percentage, 25)
+
+    def test_pdf_percentage_uses_pages_viewed(self):
+        course = create_course(self.teacher, title="PDF")
+        progress = self._progress(course)
+        progress.total_pages = 8
+        progress.pages_viewed = 2
+
+        self.assertEqual(progress.percentage, 25)
+        progress.pages_viewed = 12
+        self.assertEqual(progress.percentage, 100)
+
+    def test_completed_progress_is_always_full(self):
+        course = create_course(
+            self.teacher, title="Video", filename="lesson.mp4"
+        )
+        progress = self._progress(course)
+        progress.video_duration_seconds = 200
+        progress.video_watched_seconds = 10
+        progress.completed = True
+
+        self.assertEqual(progress.percentage, 100)
+
+    def test_mark_completed_updates_the_enrollment(self):
+        course = create_course(
+            self.teacher, title="Video", filename="lesson.mp4"
+        )
+        progress = self._progress(course)
+
+        progress.mark_completed()
+        progress.refresh_from_db()
+        progress.enrollment.refresh_from_db()
+
+        self.assertTrue(progress.completed)
+        self.assertIsNotNone(progress.completed_at)
+        self.assertTrue(progress.enrollment.completed)
+        self.assertEqual(
+            progress.enrollment.completed_at, progress.completed_at
+        )
+
+    def test_unopened_external_video_counts_zero(self):
+        course = Course.objects.create(
+            title="YouTube",
+            owner=self.teacher,
+            video_url="https://www.youtube.com/watch?v=abc123",
+        )
+        progress = self._progress(course)
+
+        self.assertEqual(progress.percentage, 0)
+        progress.has_opened_material = True
+        self.assertEqual(progress.percentage, 50)

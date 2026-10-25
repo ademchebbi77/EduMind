@@ -74,6 +74,12 @@ def api_exception_handler(exc, context):
     elif isinstance(exc, exceptions.NotAcceptable):
         code = "not_acceptable"
         message = "No acceptable response format was found."
+    elif getattr(exc, "status_code", None) == 503:
+        code = getattr(exc, "default_code", None) or "service_unavailable"
+        detail = getattr(exc, "detail", None)
+        message = (
+            str(detail) if detail else "The service is temporarily unavailable."
+        )
     else:
         code = "api_error"
         message = "An error occurred while processing the request."

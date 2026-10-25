@@ -11,6 +11,9 @@ import RegisterPage from './pages/auth/RegisterPage'
 import CourseDetailPage from './pages/courses/CourseDetailPage'
 import CourseFormPage from './pages/courses/CourseFormPage'
 import CoursesPage from './pages/courses/CoursesPage'
+import MyCoursesPage from './pages/courses/MyCoursesPage'
+import CourseEnrollmentsPage from './pages/courses/CourseEnrollmentsPage'
+import CategoriesPage from './pages/courses/CategoriesPage'
 import UserEditPage from './pages/admin/UserEditPage'
 import UsersPage from './pages/admin/UsersPage'
 import AssessmentsPage from './pages/assessments/AssessmentsPage'
@@ -68,6 +71,30 @@ export default function App() {
 
                 {/* Cours */}
                 <Route path="/courses" element={<CoursesPage />} />
+                <Route
+                  path="/my-courses"
+                  element={
+                    <RequireRole roles={STUDENT_ROLES}>
+                      <MyCoursesPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/course-enrollments"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <CourseEnrollmentsPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/categories"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <CategoriesPage />
+                    </RequireRole>
+                  }
+                />
                 <Route
                   path="/courses/new"
                   element={

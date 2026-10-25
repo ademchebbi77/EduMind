@@ -160,7 +160,7 @@ class CourseApiTests(TemporaryMediaMixin, APITestCase):
         self.assertIsNotNone(body["next"])
 
     def test_invalid_type_filter_returns_400(self):
-        response = self.client.get(LIST_URL, {"type": "video"})
+        response = self.client.get(LIST_URL, {"type": "image"})
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("type", response.json()["error"]["fields"])
@@ -277,7 +277,18 @@ class CourseApiTests(TemporaryMediaMixin, APITestCase):
         )
         self.assertEqual(
             data["allowed_extensions"],
-            ["pdf", "mp3", "wav", "m4a", "ogg"],
+            ["pdf", "mp3", "wav", "m4a", "ogg", "mp4", "webm", "avi"],
         )
         self.assertEqual(data["pdf_extensions"], ["pdf"])
         self.assertIn("wav", data["audio_extensions"])
+        self.assertEqual(data["video_extensions"], ["mp4", "webm", "avi"])
+        self.assertEqual(
+            data["max_video_upload_size_mb"],
+            settings.MAX_VIDEO_UPLOAD_SIZE_MB,
+        )
+        self.assertEqual(
+            data["thumbnail_max_size_mb"],
+            settings.THUMBNAIL_MAX_SIZE_MB,
+        )
+        self.assertEqual(data["thumbnail_max_width"], 1920)
+        self.assertEqual(data["thumbnail_max_height"], 1080)

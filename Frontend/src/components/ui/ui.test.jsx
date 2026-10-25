@@ -1,8 +1,9 @@
+import { useState } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { Button } from './Button'
-import { Input } from './Field'
+import { Input, Textarea } from './Field'
 import { Modal } from './Modal'
 
 describe('Button', () => {
@@ -53,5 +54,32 @@ describe('Modal', () => {
 
     await user.keyboard('{Escape}')
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps focus in the edited field when the parent re-renders', async () => {
+    const user = userEvent.setup()
+
+    function Harness() {
+      const [description, setDescription] = useState('')
+      return (
+        <Modal open onClose={() => {}} title="Edit category">
+          <Input label="Name" name="name" data-autofocus />
+          <Textarea
+            label="Description"
+            name="description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </Modal>
+      )
+    }
+
+    render(<Harness />)
+
+    const description = screen.getByLabelText(/description/i)
+    await user.type(description, 'Course basics')
+
+    expect(description).toHaveValue('Course basics')
+    expect(description).toHaveFocus()
   })
 })

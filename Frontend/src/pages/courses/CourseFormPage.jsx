@@ -8,7 +8,13 @@ import {
   RotateCcw,
   ShieldCheck,
 } from 'lucide-react'
-import { createCourse, fetchCourse, updateCourse } from '../../api/courses'
+import {
+  createCourse,
+  fetchCategories,
+  fetchCourse,
+  updateCourse,
+  updateCourseFields,
+} from '../../api/courses'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { firstFieldError, isCanceled, normalizeApiError } from '../../lib/api'
@@ -19,11 +25,17 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
-import { Input, Textarea } from '../../components/ui/Field'
+import { Input, Select, Textarea } from '../../components/ui/Field'
 import { PageLoader } from '../../components/ui/Skeleton'
 import { AccessDenied } from '../../components/courses/AccessDenied'
 import { FileDropzone } from '../../components/courses/FileDropzone'
 import { FilePreview } from '../../components/courses/FilePreview'
+import { TagInput } from '../../components/courses/TagInput'
+import { ThumbnailUpload } from '../../components/courses/ThumbnailUpload'
+
+const FALLBACK_THUMBNAIL_EXTENSIONS = ['jpeg', 'jpg', 'png', 'webp']
+const FALLBACK_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024
+const VIDEO_URL_HOSTS = ['youtube.com', 'youtu.be', 'vimeo.com']
 
 function validateSelectedFile(file, config) {
   if (!config) return 'Upload rules are not available yet.'
@@ -35,18 +47,83 @@ function validateSelectedFile(file, config) {
     return `Unsupported format. Choose a file: ${formats}.`
   }
   if (file.size <= 0) return 'This file is empty.'
-  if (file.size > config.max_upload_size_bytes) {
-    return `The file exceeds the maximum size of ${config.max_upload_size_mb} MB.`
+
+  const isVideo = (config.video_extensions || ['mp4', 'webm', 'avi']).includes(extension)
+  const maxBytes = isVideo
+    ? config.max_video_upload_size_bytes ?? config.max_upload_size_bytes
+    : config.max_upload_size_bytes
+  const maxMb = isVideo
+    ? config.max_video_upload_size_mb ?? config.max_upload_size_mb
+    : config.max_upload_size_mb
+
+  if (file.size > maxBytes) {
+    return `The file exceeds the maximum size of ${maxMb} MB.`
   }
   return null
+}
+
+function validateThumbnailFile(file, config) {
+  const extensions =
+    config?.thumbnail_extensions?.length
+      ? config.thumbnail_extensions
+      : FALLBACK_THUMBNAIL_EXTENSIONS
+  const maxBytes = config?.thumbnail_max_size_bytes ?? FALLBACK_THUMBNAIL_MAX_BYTES
+  const maxMb = config?.thumbnail_max_size_mb ?? 2
+  const formats = extensions.map((value) => value.toUpperCase()).join(', ')
+
+  if (file.size <= 0) return 'This image is empty.'
+  if (!extensions.includes(fileExtension(file.name))) {
+    return `Unsupported image format. Choose a file: ${formats}.`
+  }
+  if (file.size > maxBytes) {
+    return `The thumbnail exceeds the maximum size of ${maxMb} MB.`
+  }
+  return null
+}
+
+function validateVideoUrl(value) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  let parsed
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    return 'Enter a valid YouTube or Vimeo URL.'
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return 'Enter a valid YouTube or Vimeo URL.'
+  }
+
+  const host = parsed.hostname.toLowerCase().replace(/^www\./, '')
+  const supported = VIDEO_URL_HOSTS.some(
+    (domain) => host === domain || host.endsWith(`.${domain}`),
+  )
+
+  return supported ? null : 'Only YouTube and Vimeo links are supported.'
 }
 
 function fieldErrors(fields) {
   return {
     title: firstFieldError(fields, 'title'),
     description: firstFieldError(fields, 'description'),
+    category: firstFieldError(fields, 'category'),
+    tags: firstFieldError(fields, 'tags'),
+    thumbnail: firstFieldError(fields, 'thumbnail'),
     file: firstFieldError(fields, 'file'),
+    video_url: firstFieldError(fields, 'video_url'),
+    max_students: firstFieldError(fields, 'max_students'),
   }
+}
+
+const EMPTY_VALUES = {
+  title: '',
+  description: '',
+  category: '',
+  tags: [],
+  videoUrl: '',
+  maxStudents: '',
 }
 
 export default function CourseFormPage() {
@@ -62,16 +139,41 @@ export default function CourseFormPage() {
   const [reload, setReload] = useState(0)
   const [fetchResult, setFetchResult] = useState({ key: null, course: null, error: null })
 
-  const [values, setValues] = useState({ title: '', description: '' })
+  const [values, setValues] = useState(EMPTY_VALUES)
   const [selectedFile, setSelectedFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
   const previewUrlRef = useRef(null)
+
+  const [thumbnailFile, setThumbnailFile] = useState(null)
+  const [existingThumbnailUrl, setExistingThumbnailUrl] = useState(null)
+  const [removeThumbnail, setRemoveThumbnail] = useState(false)
+
+  const [categories, setCategories] = useState([])
+  const [categoriesError, setCategoriesError] = useState('')
+
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState(null)
 
   const requestKey = `${courseId ?? 'new'}:${reload}`
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    fetchCategories({ ordering: 'name', pageSize: 50 }, { signal: controller.signal })
+      .then((payload) => {
+        setCategories(Array.isArray(payload) ? payload : payload.results ?? [])
+      })
+      .catch((requestError) => {
+        if (isCanceled(requestError)) return
+        setCategoriesError(
+          normalizeApiError(requestError, 'Unable to load categories.').message,
+        )
+      })
+
+    return () => controller.abort()
+  }, [])
 
   useEffect(() => {
     if (!isEdit) return undefined
@@ -81,7 +183,18 @@ export default function CourseFormPage() {
     fetchCourse(courseId, { signal: controller.signal })
       .then((payload) => {
         setFetchResult({ key: requestKey, course: payload, error: null })
-        setValues({ title: payload.title, description: payload.description || '' })
+        setValues({
+          title: payload.title,
+          description: payload.description || '',
+          category: payload.category ? String(payload.category) : '',
+          tags: Array.isArray(payload.tags) ? payload.tags : [],
+          videoUrl: payload.video_url || '',
+          maxStudents:
+            payload.max_students !== null && payload.max_students !== undefined
+              ? String(payload.max_students)
+              : '',
+        })
+        setExistingThumbnailUrl(payload.thumbnail_url || null)
       })
       .catch((requestError) => {
         if (isCanceled(requestError)) return
@@ -135,6 +248,24 @@ export default function CourseFormPage() {
     updatePreview(null)
   }
 
+  function handleThumbnailSelect(file) {
+    const thumbnailError = validateThumbnailFile(file, config)
+    if (thumbnailError) {
+      setThumbnailFile(null)
+      setErrors((current) => ({ ...current, thumbnail: thumbnailError }))
+      return
+    }
+    setThumbnailFile(file)
+    setRemoveThumbnail(false)
+    setErrors((current) => ({ ...current, thumbnail: undefined }))
+  }
+
+  function handleThumbnailRemove() {
+    setThumbnailFile(null)
+    setRemoveThumbnail(true)
+    setErrors((current) => ({ ...current, thumbnail: undefined }))
+  }
+
   function validateForm() {
     const nextErrors = {}
 
@@ -144,11 +275,33 @@ export default function CourseFormPage() {
       nextErrors.title = 'The title cannot exceed 200 characters.'
     }
 
-    if (!isEdit && !selectedFile) {
-      nextErrors.file = 'Select a PDF or audio file.'
+    if (!isEdit && !selectedFile && !values.videoUrl.trim()) {
+      nextErrors.file = 'Select a file or provide a video link.'
     } else if (selectedFile) {
       const fileError = validateSelectedFile(selectedFile, config)
       if (fileError) nextErrors.file = fileError
+    }
+
+    const videoUrlError = validateVideoUrl(values.videoUrl)
+    if (videoUrlError) nextErrors.video_url = videoUrlError
+
+    const joinedTags = values.tags.join(',')
+    if (values.tags.some((tag) => tag.length > 50)) {
+      nextErrors.tags = 'Each tag must be at most 50 characters.'
+    } else if (joinedTags.length > 500) {
+      nextErrors.tags = 'Tags cannot exceed 500 characters in total.'
+    }
+
+    if (values.maxStudents !== '') {
+      const maxStudents = Number(values.maxStudents)
+      if (!Number.isInteger(maxStudents) || maxStudents < 1) {
+        nextErrors.max_students = 'Enter a whole number of at least 1.'
+      }
+    }
+
+    if (thumbnailFile) {
+      const thumbnailError = validateThumbnailFile(thumbnailFile, config)
+      if (thumbnailError) nextErrors.thumbnail = thumbnailError
     }
 
     setErrors(nextErrors)
@@ -163,7 +316,27 @@ export default function CourseFormPage() {
     const formData = new FormData()
     formData.append('title', values.title.trim())
     formData.append('description', values.description.trim())
+    formData.append('video_url', values.videoUrl.trim())
+    formData.append('tags', values.tags.join(', '))
+    if (values.category) formData.append('category', values.category)
+    if (values.maxStudents !== '') {
+      formData.append('max_students', String(Number(values.maxStudents)))
+    }
     if (selectedFile) formData.append('file', selectedFile)
+    if (thumbnailFile) formData.append('thumbnail', thumbnailFile)
+
+    const clearFields = {}
+    if (isEdit) {
+      if (!values.category && course?.category) clearFields.category = null
+      if (removeThumbnail && !thumbnailFile) clearFields.thumbnail = null
+      if (
+        values.maxStudents === '' &&
+        course?.max_students !== null &&
+        course?.max_students !== undefined
+      ) {
+        clearFields.max_students = null
+      }
+    }
 
     setSaving(true)
     setProgress(0)
@@ -174,9 +347,13 @@ export default function CourseFormPage() {
     }
 
     try {
-      const saved = isEdit
+      let saved = isEdit
         ? await updateCourse(courseId, formData, { onUploadProgress: handleUploadProgress })
         : await createCourse(formData, { onUploadProgress: handleUploadProgress })
+
+      if (isEdit && Object.keys(clearFields).length) {
+        saved = await updateCourseFields(courseId, clearFields)
+      }
 
       addToast({
         type: 'success',
@@ -271,11 +448,30 @@ export default function CourseFormPage() {
   const cancelTarget = isEdit ? `/courses/${courseId}` : '/courses'
   const accept = config.allowed_extensions.map((extension) => `.${extension}`).join(',')
   const formats = config.allowed_extensions.map((extension) => extension.toUpperCase())
+  const videoExtensions = config.video_extensions || ['mp4', 'webm', 'avi']
+  const thumbnailExtensions =
+    config.thumbnail_extensions?.length
+      ? config.thumbnail_extensions
+      : FALLBACK_THUMBNAIL_EXTENSIONS
+  const thumbnailHint = `${thumbnailExtensions
+    .map((value) => value.toUpperCase())
+    .join(', ')} · max ${config.thumbnail_max_size_mb ?? 2} MB.`
+
+  const selectedExtension = selectedFile ? fileExtension(selectedFile.name) : ''
   const selectedKind = selectedFile
-    ? fileExtension(selectedFile.name) === 'pdf'
-      ? 'pdf'
-      : 'audio'
+    ? videoExtensions.includes(selectedExtension)
+      ? 'video'
+      : selectedExtension === 'pdf'
+        ? 'pdf'
+        : 'audio'
     : null
+
+  const showExistingFile =
+    isEdit &&
+    course &&
+    !selectedFile &&
+    (course.has_file ??
+      (course.type !== 'video' || !course.video_url))
 
   return (
     <div className="space-y-6">
@@ -298,7 +494,7 @@ export default function CourseFormPage() {
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
           {isEdit
             ? 'Adjust the course details or replace its material. Students will see the update immediately.'
-            : 'Add a PDF or audio resource to the catalogue. The course format is detected automatically.'}
+            : 'Add a PDF, audio or video resource to the catalogue. The course format is detected automatically.'}
         </p>
       </header>
 
@@ -339,26 +535,60 @@ export default function CourseFormPage() {
                 hint="Optional. Summarise the content and learning objectives."
                 disabled={saving}
               />
+
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Select
+                  label="Category"
+                  name="category"
+                  value={values.category}
+                  onChange={(event) => updateField('category', event.target.value)}
+                  error={errors.category}
+                  hint={categoriesError || 'Optional. Help students browse the catalogue.'}
+                  disabled={saving}
+                >
+                  <option value="">No category</option>
+                  {categories.map((category) => (
+                    <option key={category.id} value={String(category.id)}>
+                      {category.name}
+                    </option>
+                  ))}
+                </Select>
+
+                <Input
+                  label="Maximum students"
+                  name="max_students"
+                  type="number"
+                  min="1"
+                  step="1"
+                  inputMode="numeric"
+                  value={values.maxStudents}
+                  onChange={(event) => updateField('maxStudents', event.target.value)}
+                  error={errors.max_students}
+                  hint="Optional. Leave empty for unlimited places."
+                  disabled={saving}
+                />
+              </div>
+
+              <TagInput
+                label="Tags"
+                value={values.tags}
+                onChange={(tags) => updateField('tags', tags)}
+                error={errors.tags}
+                hint="Press Enter or comma to add a tag. Duplicates are ignored."
+                disabled={saving}
+              />
             </Card>
 
             <Card className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-ink">
-                  Course material
-                  {!isEdit ? (
-                    <span className="ml-1 text-clay" aria-hidden="true">
-                      *
-                    </span>
-                  ) : null}
-                </h2>
+                <h2 className="text-xl font-semibold text-ink">Course material</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  {isEdit
-                    ? 'Keep the current file or choose a new resource to replace it.'
-                    : 'Add a PDF document or an audio resource. The course type follows the file extension.'}
+                  Add a file, a YouTube or Vimeo link, or both. The course type follows the
+                  uploaded file when one is provided.
                 </p>
               </div>
 
-              {isEdit && course && !selectedFile ? (
+              {showExistingFile ? (
                 <FilePreview
                   fileName="Current material"
                   kind={course.type}
@@ -382,7 +612,7 @@ export default function CourseFormPage() {
                 onFileSelect={handleFileSelect}
                 accept={accept}
                 formats={formats}
-                maxSizeMb={config.max_upload_size_mb}
+                maxSizeMb={config.max_video_upload_size_mb ?? config.max_upload_size_mb}
                 disabled={saving}
                 error={errors.file}
               />
@@ -391,6 +621,41 @@ export default function CourseFormPage() {
                 <p className="text-xs text-slate-500">
                   This file will replace the current material when you save.
                 </p>
+              ) : null}
+
+              <Input
+                label="Video link"
+                name="video_url"
+                type="url"
+                value={values.videoUrl}
+                onChange={(event) => updateField('videoUrl', event.target.value)}
+                error={errors.video_url}
+                hint="YouTube or Vimeo URL. You can combine it with an uploaded file."
+                placeholder="https://www.youtube.com/watch?v=…"
+                disabled={saving}
+              />
+            </Card>
+
+            <Card className="space-y-4">
+              <div>
+                <h2 className="text-xl font-semibold text-ink">Thumbnail</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Optional cover image shown in the catalogue and on the course page.
+                </p>
+              </div>
+
+              <ThumbnailUpload
+                file={thumbnailFile}
+                existingUrl={removeThumbnail ? null : existingThumbnailUrl}
+                onSelect={handleThumbnailSelect}
+                onRemove={handleThumbnailRemove}
+                error={errors.thumbnail}
+                hint={thumbnailHint}
+                disabled={saving}
+              />
+
+              {isEdit && removeThumbnail && !thumbnailFile ? (
+                <p className="text-xs text-clay">The current thumbnail will be removed on save.</p>
               ) : null}
             </Card>
           </div>
@@ -409,15 +674,23 @@ export default function CourseFormPage() {
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-sage" aria-hidden="true" />
                   <span>
                     Maximum size:{' '}
-                    <strong className="text-ink-soft">{config.max_upload_size_mb} MB</strong> per
-                    file.
+                    <strong className="text-ink-soft">{config.max_upload_size_mb} MB</strong> for
+                    documents and audio,{' '}
+                    <strong className="text-ink-soft">
+                      {config.max_video_upload_size_mb ?? config.max_upload_size_mb} MB
+                    </strong>{' '}
+                    for video.
+                  </span>
+                </li>
+                <li className="flex gap-2.5">
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-sage" aria-hidden="true" />
+                  <span>
+                    Thumbnail: <strong className="text-ink-soft">{thumbnailHint}</strong>
                   </span>
                 </li>
                 <li className="flex gap-2.5">
                   <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-strong" aria-hidden="true" />
-                  <span>
-                    Files are private and only served to signed-in users.
-                  </span>
+                  <span>Files are private and only served to signed-in users.</span>
                 </li>
                 <li className="flex gap-2.5">
                   <Lock className="mt-0.5 size-4 shrink-0 text-clay" aria-hidden="true" />
