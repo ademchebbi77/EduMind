@@ -82,6 +82,28 @@
     @apply block h-1 w-14 rounded-full bg-brand;
   }
 
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(255 253 248 / 0.22) transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background-color: rgb(255 253 248 / 0.22);
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(255 253 248 / 0.4);
+  }
+
   .toast-enter {
     animation: toast-in 180ms ease-out both;
   }
@@ -152,6 +174,14 @@ html[data-contrast="high"] body {
 /* Semi-transparent white text on dark areas (sidebar, sign-in panel) becomes solid. */
 html[data-contrast="high"] [class*="text-white/"] {
   color: #ffffff;
+}
+
+html[data-contrast="high"] .sidebar-scroll {
+  scrollbar-color: #ffffff transparent;
+}
+
+html[data-contrast="high"] .sidebar-scroll::-webkit-scrollbar-thumb {
+  background-color: #ffffff;
 }
 
 html[data-contrast="high"] ::placeholder {

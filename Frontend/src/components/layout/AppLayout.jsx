@@ -82,7 +82,7 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
 
       <nav
         aria-label="Main navigation"
-        className="relative flex-1 space-y-1 overflow-y-auto px-3 py-6"
+        className="sidebar-scroll relative flex-1 space-y-1 overflow-y-auto px-3 py-6"
       >
         <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-white/55">
           Learning space
