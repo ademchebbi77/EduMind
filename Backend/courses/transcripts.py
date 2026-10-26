@@ -12,7 +12,7 @@ from django.conf import settings
 from django.db import close_old_connections
 from django.utils import timezone
 
-from .models import CourseTranscript
+from .models import CourseTranscript, LessonTranscript
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +47,9 @@ def format_timestamp(seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
-def _update_transcript(transcript_id, **fields):
+def _update_transcript(model, transcript_id, **fields):
     fields["updated_at"] = timezone.now()
-    CourseTranscript.objects.filter(pk=transcript_id).update(**fields)
+    model.objects.filter(pk=transcript_id).update(**fields)
 
 
 def _get_client():
@@ -63,12 +63,9 @@ def _get_client():
     return cohere.ClientV2(api_key=settings.COHERE_API_KEY)
 
 
-def _source_path(course, workdir):
-    stored = course.file
+def _source_path(stored, workdir, not_found_message):
     if not stored:
-        raise TranscriptGenerationError(
-            "Transcripts can only be generated for uploaded video files."
-        )
+        raise TranscriptGenerationError(not_found_message)
 
     try:
         path = Path(stored.path)
@@ -77,9 +74,7 @@ def _source_path(course, workdir):
 
     if path is not None:
         if not path.exists():
-            raise TranscriptGenerationError(
-                "The course video file could not be found."
-            )
+            raise TranscriptGenerationError(not_found_message)
         return path
 
     destination = workdir / f"source{Path(stored.name).suffix.lower() or '.bin'}"
@@ -88,9 +83,7 @@ def _source_path(course, workdir):
             with destination.open("wb") as target:
                 shutil.copyfileobj(source, target)
     except (FileNotFoundError, OSError) as error:
-        raise TranscriptGenerationError(
-            "The course video file could not be found."
-        ) from error
+        raise TranscriptGenerationError(not_found_message) from error
     return destination
 
 
@@ -260,11 +253,12 @@ def _user_facing_error(error):
     return GENERIC_ERROR
 
 
-def _fail(transcript_id, message):
+def _fail(transcript, message):
     _update_transcript(
-        transcript_id,
-        status=CourseTranscript.Status.FAILED,
-        stage=CourseTranscript.Stage.FAILED,
+        type(transcript),
+        transcript.pk,
+        status=type(transcript).Status.FAILED,
+        stage=type(transcript).Stage.FAILED,
         progress=0,
         error_message=message,
         completed_at=None,
@@ -273,8 +267,8 @@ def _fail(transcript_id, message):
 
 def transcript_is_stale(transcript):
     if transcript.status not in {
-        CourseTranscript.Status.QUEUED,
-        CourseTranscript.Status.PROCESSING,
+        type(transcript).Status.QUEUED,
+        type(transcript).Status.PROCESSING,
     }:
         return False
     cutoff = timezone.now() - timedelta(
@@ -284,26 +278,21 @@ def transcript_is_stale(transcript):
 
 
 def fail_stale_transcript(transcript):
-    _fail(transcript.pk, STALE_ERROR)
+    _fail(transcript, STALE_ERROR)
 
 
-def generate_transcript(transcript_id):
-    try:
-        transcript = CourseTranscript.objects.select_related("course").get(
-            pk=transcript_id
-        )
-    except CourseTranscript.DoesNotExist:
-        return
-
-    course = transcript.course
+def _generate(transcript, source_file, not_found_message, no_speech_message):
+    model = type(transcript)
+    transcript_id = transcript.pk
     language = transcript.language or settings.COHERE_TRANSCRIPT_LANGUAGE
     transcribe_model = transcript.model_name or settings.COHERE_TRANSCRIBE_MODEL
     chunk_seconds = max(30, settings.TRANSCRIPT_CHUNK_SECONDS)
 
     _update_transcript(
+        model,
         transcript_id,
-        status=CourseTranscript.Status.PROCESSING,
-        stage=CourseTranscript.Stage.QUEUED,
+        status=model.Status.PROCESSING,
+        stage=model.Stage.QUEUED,
         progress=2,
         error_message="",
         started_at=timezone.now(),
@@ -315,18 +304,20 @@ def generate_transcript(transcript_id):
 
         with tempfile.TemporaryDirectory(prefix="edumind-transcript-") as temporary:
             workdir = Path(temporary)
-            source = _source_path(course, workdir)
+            source = _source_path(source_file, workdir, not_found_message)
 
             _update_transcript(
+                model,
                 transcript_id,
-                stage=CourseTranscript.Stage.EXTRACTING,
+                stage=model.Stage.EXTRACTING,
                 progress=5,
             )
             chunks = _extract_audio_chunks(source, workdir, chunk_seconds)
 
             _update_transcript(
+                model,
                 transcript_id,
-                stage=CourseTranscript.Stage.TRANSCRIBING,
+                stage=model.Stage.TRANSCRIBING,
                 progress=10,
                 segment_count=len(chunks),
             )
@@ -340,19 +331,19 @@ def generate_transcript(transcript_id):
                     offset = format_timestamp(index * chunk_seconds)
                     lines.append(f"[{offset}] {text}")
                 _update_transcript(
+                    model,
                     transcript_id,
                     progress=10 + round(75 * (index + 1) / len(chunks)),
                 )
 
             raw = "\n".join(lines).strip()
             if not raw:
-                raise TranscriptGenerationError(
-                    "No speech was detected in this video."
-                )
+                raise TranscriptGenerationError(no_speech_message)
 
             _update_transcript(
+                model,
                 transcript_id,
-                stage=CourseTranscript.Stage.FORMATTING,
+                stage=model.Stage.FORMATTING,
                 progress=90,
             )
             formatted, used_ai = _format_transcript(
@@ -360,9 +351,10 @@ def generate_transcript(transcript_id):
             )
 
         _update_transcript(
+            model,
             transcript_id,
-            status=CourseTranscript.Status.COMPLETED,
-            stage=CourseTranscript.Stage.DONE,
+            status=model.Status.COMPLETED,
+            stage=model.Stage.DONE,
             progress=100,
             text=formatted,
             formatted_by_ai=used_ai,
@@ -370,18 +362,50 @@ def generate_transcript(transcript_id):
             completed_at=timezone.now(),
         )
     except TranscriptGenerationError as error:
-        _fail(transcript_id, str(error))
+        _fail(transcript, str(error))
     except Exception as error:
         logger.exception(
             "Transcript generation failed for transcript %s", transcript_id
         )
-        _fail(transcript_id, _user_facing_error(error))
+        _fail(transcript, _user_facing_error(error))
 
 
-def _run_job(transcript_id):
+def generate_transcript(transcript_id):
+    try:
+        transcript = CourseTranscript.objects.select_related("course").get(
+            pk=transcript_id
+        )
+    except CourseTranscript.DoesNotExist:
+        return
+
+    _generate(
+        transcript,
+        transcript.course.file,
+        "The course video file could not be found.",
+        "No speech was detected in this video.",
+    )
+
+
+def generate_lesson_transcript(transcript_id):
+    try:
+        transcript = LessonTranscript.objects.select_related(
+            "lesson"
+        ).get(pk=transcript_id)
+    except LessonTranscript.DoesNotExist:
+        return
+
+    _generate(
+        transcript,
+        transcript.lesson.file,
+        "The lesson file could not be found.",
+        "No speech was detected in this recording.",
+    )
+
+
+def _run_job(generator, transcript_id):
     close_old_connections()
     try:
-        generate_transcript(transcript_id)
+        generator(transcript_id)
     finally:
         close_old_connections()
 
@@ -389,8 +413,18 @@ def _run_job(transcript_id):
 def enqueue_transcript(transcript_id):
     thread = threading.Thread(
         target=_run_job,
-        args=(transcript_id,),
+        args=(generate_transcript, transcript_id),
         name=f"course-transcript-{transcript_id}",
+        daemon=True,
+    )
+    thread.start()
+
+
+def enqueue_lesson_transcript(transcript_id):
+    thread = threading.Thread(
+        target=_run_job,
+        args=(generate_lesson_transcript, transcript_id),
+        name=f"lesson-transcript-{transcript_id}",
         daemon=True,
     )
     thread.start()

@@ -8,6 +8,7 @@ from .models import (
     Enrollment,
     Lesson,
     LessonCompletion,
+    LessonTranscript,
 )
 
 
@@ -142,4 +143,27 @@ class CourseTranscriptAdmin(admin.ModelAdmin):
     )
     list_select_related = ("course",)
     autocomplete_fields = ("course", "requested_by")
+    ordering = ("-updated_at",)
+
+
+@admin.register(LessonTranscript)
+class LessonTranscriptAdmin(admin.ModelAdmin):
+    list_display = (
+        "lesson",
+        "status",
+        "stage",
+        "progress",
+        "formatted_by_ai",
+        "updated_at",
+    )
+    list_filter = ("status", "formatted_by_ai")
+    search_fields = ("lesson__title", "lesson__course__title")
+    readonly_fields = (
+        "created_at",
+        "updated_at",
+        "started_at",
+        "completed_at",
+    )
+    list_select_related = ("lesson",)
+    autocomplete_fields = ("lesson", "requested_by")
     ordering = ("-updated_at",)

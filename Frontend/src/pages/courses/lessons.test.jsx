@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   updateCourseProgress: vi.fn(),
   createCourse: vi.fn(),
   fetchCategories: vi.fn(),
+  fetchLessonTranscript: vi.fn(),
+  generateLessonTranscript: vi.fn(),
   config: {
     max_upload_size_mb: 50,
     max_upload_size_bytes: 50 * 1024 * 1024,
@@ -54,6 +56,8 @@ vi.mock('../../api/courses', () => ({
   updateCourseProgress: mocks.updateCourseProgress,
   createCourse: mocks.createCourse,
   fetchCategories: mocks.fetchCategories,
+  fetchLessonTranscript: mocks.fetchLessonTranscript,
+  generateLessonTranscript: mocks.generateLessonTranscript,
 }))
 vi.mock('../../hooks/useAppConfig', () => ({
   useAppConfig: () => ({
@@ -437,6 +441,39 @@ describe('LessonPlayerPage', () => {
     expect(screen.getByText('Lesson file')).toBeInTheDocument()
     expect(screen.getByText('External video')).toBeInTheDocument()
     expect(mocks.completeLesson).not.toHaveBeenCalled()
+  })
+
+  it('offers an AI transcript under uploaded media lessons', async () => {
+    signInAs(STUDENT)
+    const videoLesson = lesson({
+      id: 2,
+      title: 'Deep dive',
+      order: 2,
+      file_type: 'video',
+    })
+    const openLessons = PLAYER_LESSONS.slice(0, 1).map((item) => ({
+      ...item,
+      is_locked: false,
+    }))
+    mocks.fetchCourse.mockResolvedValue({
+      ...COURSE,
+      lessons: [...openLessons, videoLesson],
+    })
+    renderRoute('/courses/1/lessons/2')
+
+    expect(
+      await screen.findByRole('button', { name: 'Transcript' }),
+    ).toBeInTheDocument()
+    expect(mocks.fetchLessonTranscript).not.toHaveBeenCalled()
+  })
+
+  it('does not offer a transcript for PDF lessons', async () => {
+    signInAs(STUDENT)
+    mocks.fetchCourse.mockResolvedValue({ ...COURSE, lessons: PLAYER_LESSONS })
+    renderRoute('/courses/1/lessons/1')
+
+    await screen.findByTitle('Lesson document: Introduction')
+    expect(screen.queryByRole('button', { name: 'Transcript' })).toBeNull()
   })
 })
 

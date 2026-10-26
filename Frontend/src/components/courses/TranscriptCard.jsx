@@ -6,6 +6,12 @@ import {
 } from '../../api/courses'
 import { isCanceled, normalizeApiError } from '../../lib/api'
 import { formatDate } from '../../lib/format'
+import {
+  TRANSCRIPT_LANGUAGES,
+  TRANSCRIPT_STAGE_LABELS,
+  defaultTranscriptLanguage,
+  parseTranscriptParagraphs,
+} from '../../lib/transcripts'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
@@ -14,63 +20,13 @@ import { ProgressBar } from './ProgressBar'
 const POLL_INTERVAL_MS = 3000
 const ACTIVE_STATUSES = new Set(['queued', 'processing'])
 
-const STAGE_LABELS = {
-  queued: 'Waiting to start…',
-  extracting_audio: 'Extracting the audio track…',
-  transcribing: 'Transcribing the audio…',
-  formatting: 'Formatting the transcript…',
-}
-
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'fr', label: 'French' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'de', label: 'German' },
-  { code: 'it', label: 'Italian' },
-  { code: 'pt', label: 'Portuguese' },
-  { code: 'nl', label: 'Dutch' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'zh', label: 'Chinese' },
-  { code: 'ja', label: 'Japanese' },
-  { code: 'ko', label: 'Korean' },
-  { code: 'el', label: 'Greek' },
-  { code: 'tr', label: 'Turkish' },
-  { code: 'vi', label: 'Vietnamese' },
-]
-
-function defaultLanguage() {
-  const code = (navigator.language || '').slice(0, 2).toLowerCase()
-  return LANGUAGES.some((language) => language.code === code) ? code : 'en'
-}
-
-function parseParagraphs(text) {
-  const paragraphs = []
-
-  for (const rawLine of (text || '').split(/\n+/)) {
-    const line = rawLine.trim()
-    if (!line) continue
-
-    const match = line.match(/^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(.*)$/)
-    if (match) {
-      paragraphs.push({ timestamp: match[1], text: match[2] })
-    } else if (paragraphs.length) {
-      paragraphs[paragraphs.length - 1].text =
-        `${paragraphs[paragraphs.length - 1].text} ${line}`.trim()
-    } else {
-      paragraphs.push({ timestamp: null, text: line })
-    }
-  }
-
-  return paragraphs
-}
-
 export function TranscriptCard({ course, canGenerate }) {
   const [result, setResult] = useState({ key: null, data: null, error: null })
   const [reload, setReload] = useState(0)
   const [pollTick, setPollTick] = useState(0)
   const [starting, setStarting] = useState(false)
   const [actionError, setActionError] = useState(null)
-  const [language, setLanguage] = useState(defaultLanguage)
+  const [language, setLanguage] = useState(defaultTranscriptLanguage)
 
   const requestKey = `${course.id}:${reload}`
 
@@ -155,7 +111,8 @@ export function TranscriptCard({ course, canGenerate }) {
   const progress = transcript?.progress ?? 0
   const canStart =
     !loadError && canGenerate && (status === 'none' || status === 'failed')
-  const paragraphs = status === 'completed' ? parseParagraphs(transcript.text) : []
+  const paragraphs =
+    status === 'completed' ? parseTranscriptParagraphs(transcript.text) : []
 
   return (
     <Card as="section" aria-labelledby="course-transcript-title" aria-busy={active || undefined}>
@@ -228,7 +185,8 @@ export function TranscriptCard({ course, canGenerate }) {
                 className="size-4 animate-spin text-brand-strong"
                 aria-hidden="true"
               />
-              {STAGE_LABELS[transcript.stage] || 'Processing your transcript…'}
+              {TRANSCRIPT_STAGE_LABELS[transcript.stage] ||
+                'Processing your transcript…'}
             </p>
             <span className="text-sm font-semibold text-brand-strong">
               {progress}%
@@ -265,7 +223,7 @@ export function TranscriptCard({ course, canGenerate }) {
                 aria-label="Spoken language"
                 className="h-11 rounded-xl border border-line bg-paper px-3 text-sm text-ink-soft"
               >
-                {LANGUAGES.map(({ code, label }) => (
+                {TRANSCRIPT_LANGUAGES.map(({ code, label }) => (
                   <option key={code} value={code}>
                     {label}
                   </option>

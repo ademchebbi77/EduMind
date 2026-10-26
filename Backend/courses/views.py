@@ -38,6 +38,7 @@ from .models import (
     CourseTranscript,
     Enrollment,
     Lesson,
+    LessonTranscript,
 )
 from .permissions import CanManageCategory, CanManageCourse, CanManageEnrollment
 from .progress import get_or_create_progress, record_progress
@@ -48,15 +49,17 @@ from .serializers import (
     CourseProgressSerializer,
     CourseProgressUpdateSerializer,
     CourseSerializer,
-    CourseTranscriptRequestSerializer,
     CourseTranscriptSerializer,
     EnrollmentSerializer,
     LessonCompleteSerializer,
     LessonReorderSerializer,
     LessonSerializer,
+    LessonTranscriptSerializer,
+    TranscriptRequestSerializer,
 )
 from .throttling import check_bulk_lesson_analysis_throttle
 from .transcripts import (
+    enqueue_lesson_transcript,
     enqueue_transcript,
     fail_stale_transcript,
     transcript_is_stale,
@@ -334,7 +337,7 @@ class CourseViewSet(viewsets.ModelViewSet):
                 "Transcript generation is not configured on this server."
             )
 
-        payload = CourseTranscriptRequestSerializer(data=request.data)
+        payload = TranscriptRequestSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
         language = payload.validated_data["language"]
 
@@ -830,6 +833,107 @@ class LessonViewSet(viewsets.ModelViewSet):
 
         return build_lesson_file_response(
             request, lesson, as_attachment=False
+        )
+
+    def _require_lesson_access(self, course, lesson):
+        if self._can_manage(course):
+            return
+        self._require_enrolled(course, self.request.user)
+        if lesson.is_locked_for(self.request.user):
+            raise PermissionDenied("Complete the previous lesson first.")
+
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        url_path="transcript",
+        url_name="transcript",
+        permission_classes=[IsAuthenticated],
+    )
+    def transcript(self, request, course_id=None, pk=None):
+        course = self._get_course()
+        lesson = self.get_object()
+        self._require_lesson_access(course, lesson)
+
+        if request.method == "GET":
+            transcript = getattr(lesson, "transcript", None)
+            if transcript is None:
+                return Response(NO_TRANSCRIPT)
+            if transcript_is_stale(transcript):
+                fail_stale_transcript(transcript)
+                transcript.refresh_from_db()
+            return Response(LessonTranscriptSerializer(transcript).data)
+
+        if not lesson.file or lesson.file_type not in {
+            Lesson.FileType.VIDEO,
+            Lesson.FileType.AUDIO,
+        }:
+            raise serializers.ValidationError(
+                {
+                    "lesson": (
+                        "Transcripts can only be generated for uploaded "
+                        "audio or video lessons."
+                    )
+                }
+            )
+        if not settings.COHERE_API_KEY:
+            raise TranscriptServiceUnavailable(
+                "Transcript generation is not configured on this server."
+            )
+
+        payload = TranscriptRequestSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        language = payload.validated_data["language"]
+        regenerate = payload.validated_data["regenerate"]
+
+        try:
+            transcript, created = LessonTranscript.objects.get_or_create(
+                lesson=lesson
+            )
+        except IntegrityError:
+            transcript = LessonTranscript.objects.get(lesson=lesson)
+            created = False
+
+        with transaction.atomic():
+            transcript = LessonTranscript.objects.select_for_update().get(
+                pk=transcript.pk
+            )
+            active = transcript.status in {
+                LessonTranscript.Status.QUEUED,
+                LessonTranscript.Status.PROCESSING,
+            }
+            stale = transcript_is_stale(transcript)
+            if not created and not stale and not regenerate:
+                if active:
+                    return Response(
+                        LessonTranscriptSerializer(transcript).data,
+                        status=202,
+                    )
+                if (
+                    transcript.status == LessonTranscript.Status.COMPLETED
+                    and transcript.language == language
+                ):
+                    return Response(
+                        LessonTranscriptSerializer(transcript).data
+                    )
+
+            transcript.status = LessonTranscript.Status.QUEUED
+            transcript.stage = LessonTranscript.Stage.QUEUED
+            transcript.progress = 0
+            transcript.language = language
+            transcript.model_name = settings.COHERE_TRANSCRIBE_MODEL
+            transcript.text = ""
+            transcript.formatted_by_ai = False
+            transcript.segment_count = 0
+            transcript.error_message = ""
+            transcript.requested_by = request.user
+            transcript.started_at = None
+            transcript.completed_at = None
+            transcript.save()
+
+        enqueue_lesson_transcript(transcript.pk)
+        return Response(
+            LessonTranscriptSerializer(transcript).data,
+            status=202,
         )
 
     @action(

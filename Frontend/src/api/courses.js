@@ -170,6 +170,26 @@ export async function generateCourseTranscript(courseId, { language = 'en' } = {
   return data
 }
 
+export async function fetchLessonTranscript(courseId, lessonId, { signal } = {}) {
+  const { data } = await api.get(
+    `/courses/${courseId}/lessons/${lessonId}/transcript/`,
+    { signal },
+  )
+  return data
+}
+
+export async function generateLessonTranscript(
+  courseId,
+  lessonId,
+  { language = 'en', regenerate = false } = {},
+) {
+  const { data } = await api.post(
+    `/courses/${courseId}/lessons/${lessonId}/transcript/`,
+    { language, regenerate },
+  )
+  return data
+}
+
 export async function fetchLessons(courseId, { signal } = {}) {
   const { data } = await api.get(`/courses/${courseId}/lessons/`, { signal })
   return data

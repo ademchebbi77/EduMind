@@ -15,6 +15,7 @@ from .models import (
     Enrollment,
     Lesson,
     LessonCompletion,
+    LessonTranscript,
 )
 from .validators import validate_course_file, validate_thumbnail
 
@@ -286,12 +287,42 @@ class CourseTranscriptSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class CourseTranscriptRequestSerializer(serializers.Serializer):
+class LessonTranscriptSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(
+        source="get_status_display", read_only=True
+    )
+    stage_display = serializers.CharField(
+        source="get_stage_display", read_only=True
+    )
+
+    class Meta:
+        model = LessonTranscript
+        fields = (
+            "status",
+            "status_display",
+            "stage",
+            "stage_display",
+            "progress",
+            "language",
+            "model_name",
+            "text",
+            "formatted_by_ai",
+            "segment_count",
+            "error_message",
+            "started_at",
+            "completed_at",
+            "updated_at",
+        )
+        read_only_fields = fields
+
+
+class TranscriptRequestSerializer(serializers.Serializer):
     language = serializers.ChoiceField(
         choices=TRANSCRIPT_LANGUAGES,
         default=settings.COHERE_TRANSCRIPT_LANGUAGE,
         required=False,
     )
+    regenerate = serializers.BooleanField(required=False, default=False)
 
 
 class CourseContentAnalysisSerializer(serializers.Serializer):
@@ -485,6 +516,7 @@ class LessonSerializer(serializers.ModelSerializer):
         new_file = validated_data.get("file")
         if new_file and old_file and old_file.name != updated.file.name:
             self._delete_stored_file(old_file)
+            LessonTranscript.objects.filter(lesson=updated).delete()
 
         return updated
 

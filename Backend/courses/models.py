@@ -508,3 +508,61 @@ class CourseTranscript(models.Model):
 
     def __str__(self):
         return f"Transcript for {self.course} ({self.status})"
+
+
+class LessonTranscript(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    class Stage(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        EXTRACTING = "extracting_audio", "Extracting audio"
+        TRANSCRIBING = "transcribing", "Transcribing audio"
+        FORMATTING = "formatting", "Formatting transcript"
+        DONE = "done", "Complete"
+        FAILED = "failed", "Failed"
+
+    lesson = models.OneToOneField(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name="transcript",
+    )
+    status = models.CharField(
+        max_length=12,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    stage = models.CharField(
+        max_length=20,
+        choices=Stage.choices,
+        default=Stage.QUEUED,
+    )
+    progress = models.PositiveSmallIntegerField(default=0)
+    language = models.CharField(max_length=10, default="en")
+    model_name = models.CharField(max_length=80, blank=True)
+    text = models.TextField(blank=True)
+    formatted_by_ai = models.BooleanField(default=False)
+    segment_count = models.PositiveIntegerField(default=0)
+    error_message = models.TextField(blank=True)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_lesson_transcripts",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "lesson transcript"
+        verbose_name_plural = "lesson transcripts"
+
+    def __str__(self):
+        return f"Transcript for {self.lesson} ({self.status})"

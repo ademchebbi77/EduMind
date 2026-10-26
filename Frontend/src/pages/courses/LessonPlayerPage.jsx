@@ -24,6 +24,7 @@ import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageLoader } from '../../components/ui/Skeleton'
+import { LessonTranscript } from '../../components/courses/LessonTranscript'
 
 const COMPLETE_THRESHOLD = 0.9
 
@@ -391,6 +392,12 @@ export default function LessonPlayerPage() {
       </header>
 
       <Player lesson={lesson} onTimeUpdate={handleTimeUpdate} />
+
+      <LessonTranscript
+        key={`${courseId}:${lesson.id}`}
+        courseId={courseId}
+        lesson={lesson}
+      />
 
       {courseCompleted ? (
         <div
