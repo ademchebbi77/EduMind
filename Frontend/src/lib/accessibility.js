@@ -15,6 +15,8 @@ export const TEXT_SIZES = [
 export const DEFAULT_PREFERENCES = {
   textSize: 'default',
   highContrast: false,
+  readableFont: false,
+  underlineLinks: false,
 }
 
 export function sanitizePreferences(value) {
@@ -25,6 +27,8 @@ export function sanitizePreferences(value) {
   return {
     textSize,
     highContrast: source.highContrast === true,
+    readableFont: source.readableFont === true,
+    underlineLinks: source.underlineLinks === true,
   }
 }
 
@@ -47,8 +51,15 @@ export function savePreferences(preferences) {
 
 export function applyPreferences(preferences, root = document.documentElement) {
   root.dataset.textSize = preferences.textSize
-  if (preferences.highContrast) root.dataset.contrast = 'high'
-  else delete root.dataset.contrast
+  const flags = {
+    contrast: preferences.highContrast ? 'high' : null,
+    readable: preferences.readableFont ? 'true' : null,
+    links: preferences.underlineLinks ? 'underline' : null,
+  }
+  for (const [name, value] of Object.entries(flags)) {
+    if (value) root.dataset[name] = value
+    else delete root.dataset[name]
+  }
 }
 
 export function isCustomized(preferences) {

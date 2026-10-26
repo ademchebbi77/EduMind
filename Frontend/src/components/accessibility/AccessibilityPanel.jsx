@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { Contrast, RotateCcw } from 'lucide-react'
+import { Contrast, Link2, RotateCcw, Type } from 'lucide-react'
 import { useAccessibility } from '../../context/AccessibilityContext'
 import { TEXT_SIZES, isCustomized } from '../../lib/accessibility'
 import { cx } from '../../lib/cx'
@@ -12,6 +12,18 @@ const SWITCHES = [
     icon: Contrast,
     label: 'High contrast',
     description: 'Darker text, stronger borders and plain backgrounds.',
+  },
+  {
+    name: 'readableFont',
+    icon: Type,
+    label: 'Dyslexia-friendly reading',
+    description: 'OpenDyslexic font with wider letter, word and line spacing.',
+  },
+  {
+    name: 'underlineLinks',
+    icon: Link2,
+    label: 'Underline links',
+    description: 'Make every link recognisable without relying on colour.',
   },
 ]
 

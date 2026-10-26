@@ -19,6 +19,8 @@
           var root = document.documentElement
           if (['large', 'x-large'].indexOf(saved.textSize) !== -1) root.dataset.textSize = saved.textSize
           if (saved.highContrast === true) root.dataset.contrast = 'high'
+          if (saved.readableFont === true) root.dataset.readable = 'true'
+          if (saved.underlineLinks === true) root.dataset.links = 'underline'
         }
       } catch (error) {
         // Storage unavailable: defaults apply.

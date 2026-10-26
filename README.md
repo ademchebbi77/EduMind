@@ -238,6 +238,101 @@ Le serveur de prévisualisation reprend le proxy `/api` et sert le bundle sur
 
 ---
 
+## Après un `git pull` : lancer tous les modules
+
+À faire après chaque `git pull` qui modifie le projet. Ces étapes couvrent aussi les
+modules **Quiz & exercices**, **Générateur de quiz (IA)**, **Questions vocales** et le
+panneau **Accessibility**. Commandes PowerShell, depuis la racine `EduMind`.
+
+### 1. Mettre à jour les dépendances et la base
+
+```powershell
+cd Backend
+.\.venv\Scripts\python -m pip install -r requirements.txt   # celery, redis, httpx, openai-whisper...
+$env:PYTHONUTF8=1
+.\.venv\Scripts\python manage.py migrate
+cd ..\Frontend
+npm install
+```
+
+`openai-whisper` installe PyTorch : la première installation peut prendre quelques
+minutes.
+
+### 2. Compléter son `.env` (une seule fois)
+
+Comparer son `.env` avec `.env.example` et ajouter les variables manquantes, en
+particulier :
+
+```bash
+CELERY_BROKER_URL=redis://127.0.0.1:6379/0
+VOICE_QA_TRANSCRIPTION_PROVIDER=local     # Whisper local, gratuit
+VOICE_QA_WHISPER_MODEL=base
+GEMINI_API_KEY=...                        # sa propre clé gratuite : https://aistudio.google.com/apikey
+GEMINI_MODEL=gemini-3.5-flash
+GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+```
+
+Chacun crée **sa propre clé Gemini** : ne jamais partager une clé ni la committer
+(`.env` est ignoré par Git). Sans clé Gemini, tout fonctionne sauf les réponses des
+questions vocales.
+
+### 3. Lancer l'application (2 terminaux)
+
+Ouvrir **Docker Desktop** (une fois par session), puis :
+
+```powershell
+# Terminal 1 — API Django (démarre aussi Redis et le worker Celery)
+cd Backend; $env:PYTHONUTF8=1
+.\.venv\Scripts\python manage.py runserver
+
+# Terminal 2 — interface
+cd Frontend
+npm run dev
+```
+
+Ouvrir **http://localhost:5173**. Au démarrage, `runserver` affiche des lignes `[EduMind]` :
+
+- **Redis** : s'il ne répond pas, le conteneur Docker `edumind-redis` est démarré
+  (ou créé la première fois) automatiquement ;
+- **Celery** : un worker est lancé avec le serveur et **relancé à chaque rechargement**
+  (code modifié, `git pull`), donc toujours à jour ;
+- **sans Docker** (non installé ou Docker Desktop fermé) : les tâches s'exécutent dans
+  le serveur web — tout fonctionne, mais les pages attendent la fin des traitements IA.
+
+Ce démarrage automatique ne concerne que `runserver` en développement (`DEBUG=True`) ; il
+se désactive avec `AUTO_START_BACKGROUND_SERVICES=False` (lancer alors Redis et
+`celery -A config worker --pool=solo` soi-même).
+
+La première question vocale télécharge le modèle Whisper (~140 Mo, une seule fois,
+connexion Internet nécessaire) ; elle peut prendre une minute, les suivantes quelques
+secondes.
+
+### 4. Vérifier
+
+| Module | Comment tester |
+| --- | --- |
+| Quiz & exercices | *Quizzes & exercises* : créer un quiz (enseignant), le passer (étudiant) |
+| Générateur de quiz | *Teaching → Generate a quiz* → *Upload a document* → `Backend/assessments/generation/samples/apprentissage-automatique.txt` |
+| Questions vocales | *Voice questions* : choisir un cours avec un vrai PDF, enregistrer une question |
+| Accessibilité | Bouton *Accessibility* (barre latérale) : taille du texte, contraste élevé |
+
+Tests : `.\.venv\Scripts\python manage.py test` (Redis non nécessaire) et
+`npm test` dans `Frontend`.
+
+### En cas de problème
+
+| Symptôme | Cause / solution |
+| --- | --- |
+| `ModuleNotFoundError` (celery, numpy, whisper…) | Relancer `pip install -r requirements.txt` dans le venv |
+| « The background worker is unavailable » (503) | Redis arrêté : ouvrir Docker Desktop puis relancer `runserver` |
+| Génération bloquée sur « Waiting for a worker » | `AUTO_START_BACKGROUND_SERVICES=False` : lancer le worker soi-même |
+| Ligne `[EduMind] Docker Desktop is not running` | Ouvrir Docker Desktop et relancer `runserver` (sinon mode sans Redis) |
+| « Voice questions are not available yet » | `GEMINI_API_KEY` absente du `.env`, puis redémarrer Django et le worker |
+| « The AI service is temporarily unavailable » | Gemini saturé : réessayer (*Retry*) ; le modèle de repli est déjà utilisé |
+| Port 8000 déjà utilisé | Arrêter l'autre serveur (ex. un autre projet) avant `runserver` |
+
+---
+
 ## Comptes de démonstration
 
 | Rôle | Email | Mot de passe |
@@ -462,6 +557,57 @@ l'enregistrement du quiz).
 
 ---
 
+## Questions vocales et réponses IA
+
+Page **Voice questions** (barre latérale, tous les rôles) : l'utilisateur choisit un cours,
+enregistre sa question au micro (MediaRecorder du navigateur, 3 min max) ou téléverse un
+fichier audio, relit et corrige la transcription, puis reçoit une réponse personnalisée.
+
+- **Transcription** : **Whisper** (modèle open source `base`) exécuté **localement et
+  gratuitement** sur le serveur ; l'audio est décodé avec le ffmpeg fourni par
+  `imageio-ffmpeg`. Le modèle (~140 Mo) est téléchargé une seule fois au premier usage,
+  puis tout fonctionne hors ligne. Langue détectée ou imposée (français, anglais, arabe).
+  L'API payante OpenAI Whisper reste disponible avec `VOICE_QA_TRANSCRIPTION_PROVIDER=openai`.
+  Formats : WEBM, OGG, MP3, WAV, M4A, MP4, MPEG, FLAC — 25 Mo max, signature binaire vérifiée.
+- **Réponse** : API **Google Gemini**. Le prompt contient les passages du cours les plus
+  proches de la question (texte du PDF ou transcription du cours), le prénom de
+  l'étudiant, sa moyenne aux quiz du cours et ses dernières questions sur ce cours (suivi
+  de conversation). Réponse dans la langue de la question ; l'arabe s'affiche de droite à
+  gauche.
+- **Asynchrone** : transcription et réponse sont deux tâches **Celery** ; l'interface suit
+  l'avancement, affiche les erreurs et propose « Retry ».
+- **Confidentialité** : chaque utilisateur ne voit que son propre historique (même un
+  administrateur ne peut pas lire celui d'un étudiant via l'API) ; l'audio est privé et
+  supprimé avec la question.
+- **Sécurité** : les clés restent côté serveur ; les erreurs des fournisseurs sont
+  converties en messages sûrs (aucune clé ni réponse brute renvoyée au navigateur).
+
+### Configuration
+
+Dans `.env` (puis redémarrer Django **et** le worker Celery) :
+
+```bash
+GEMINI_API_KEY=...                         # gratuit : https://aistudio.google.com/apikey
+VOICE_QA_TRANSCRIPTION_PROVIDER=local      # Whisper local gratuit (par défaut)
+VOICE_QA_WHISPER_MODEL=base                # tiny (rapide) · base · small (plus précis)
+# Optionnel : GEMINI_MODEL=gemini-3.5-flash, GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
+# (repli automatique si le modèle principal est saturé)
+# API payante : VOICE_QA_TRANSCRIPTION_PROVIDER=openai + OPENAI_API_KEY=sk-...
+```
+
+| Méthode | Chemin | Description |
+| --- | --- | --- |
+| `GET` | `/api/voice-questions/config/` | Limites, formats, langues et état de la configuration |
+| `GET` | `/api/voice-questions/` | Historique de l'utilisateur (`?course=`) |
+| `POST` | `/api/voice-questions/` | Envoi de l'audio (`course`, `audio`, `language`) → transcription |
+| `GET` | `/api/voice-questions/{id}/` | Statut, transcription et réponse |
+| `POST` | `/api/voice-questions/{id}/ask/` | Question (corrigée) envoyée à Gemini |
+| `POST` | `/api/voice-questions/{id}/retry/` | Relance l'étape en échec |
+| `GET` | `/api/voice-questions/{id}/audio/` | Écoute de l'enregistrement (propriétaire uniquement) |
+| `DELETE` | `/api/voice-questions/{id}/` | Supprime la question et l'audio |
+
+---
+
 ## Sécurité
 
 - **Sessions et CSRF** : cookies de session `HttpOnly`, `SameSite=Lax` ; jeton CSRF
@@ -582,11 +728,13 @@ ouvre un panneau de réglages appliqués immédiatement à **toute l'application
 | --- | --- |
 | Taille du texte | Normale, grande (112,5 %) ou très grande (125 %) ; toute l'interface s'adapte (unités `rem`) |
 | Contraste élevé | Textes plus foncés, bordures visibles, fonds blancs, focus plus épais |
+| Lecture adaptée à la dyslexie | Police **OpenDyslexic** (embarquée localement), espacements et interlignage augmentés |
+| Souligner les liens | Liens reconnaissables sans dépendre de la couleur |
 
 Les réglages sont mémorisés dans le navigateur (`localStorage`) et appliqués avant
 l'affichage de la page (script dans `index.html`) pour éviter tout clignotement. Le
 panneau est une boîte de dialogue accessible : ouverture au clavier, focus piégé,
-fermeture avec Échap, interrupteur `role="switch"` et boutons radio pour la taille.
+fermeture avec Échap, interrupteurs `role="switch"` et boutons radio pour la taille.
 Vérifié avec **axe-core** (aucune violation WCAG A/AA dans chaque mode) ; code dans
 `Frontend/src/components/accessibility/` et `Frontend/src/lib/accessibility.js`.
 

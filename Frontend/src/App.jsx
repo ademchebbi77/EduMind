@@ -26,6 +26,7 @@ import QuizFormPage from './pages/assessments/QuizFormPage'
 import QuizGeneratorPage from './pages/assessments/QuizGeneratorPage'
 import QuizResultPage from './pages/assessments/QuizResultPage'
 import QuizTakePage from './pages/assessments/QuizTakePage'
+import VoiceQuestionsPage from './pages/voice/VoiceQuestionsPage'
 import SessionsPage from './pages/sessions/SessionsPage'
 import SessionFormPage from './pages/sessions/SessionFormPage'
 import SessionDetailPage from './pages/sessions/SessionDetailPage'
@@ -121,6 +122,7 @@ export default function App() {
 
                 {/* Assessments (Quiz & Exercices) */}
                 <Route path="/assessments" element={<AssessmentsPage />} />
+                <Route path="/voice-questions" element={<VoiceQuestionsPage />} />
                 <Route
                   path="/quizzes/new"
                   element={

@@ -67,12 +67,14 @@ def build_course_file_response(request, course, as_attachment: bool):
     )
 
 
-def build_file_response(request, field_file, filename, as_attachment: bool):
+def build_file_response(request, field_file, filename, as_attachment: bool, content_type=None):
     """Serve a private stored file with HTTP Range support."""
     if not field_file:
         raise NotFound("The requested file could not be found.")
     extension = Path(field_file.name).suffix.lower().lstrip(".")
-    content_type = CONTENT_TYPE_BY_EXTENSION.get(extension, "application/octet-stream")
+    content_type = content_type or CONTENT_TYPE_BY_EXTENSION.get(
+        extension, "application/octet-stream"
+    )
     storage = field_file.storage
     file_name = field_file.name
 

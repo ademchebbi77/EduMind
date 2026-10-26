@@ -6,6 +6,9 @@ import '@fontsource/poppins/latin-600.css'
 import '@fontsource/poppins/latin-700.css'
 import '@fontsource/fraunces/latin-600.css'
 import '@fontsource/fraunces/latin-700.css'
+// Only downloaded when "Dyslexia-friendly reading" is turned on.
+import '@fontsource/opendyslexic/latin-400.css'
+import '@fontsource/opendyslexic/latin-700.css'
 import './index.css'
 import App from './App.jsx'
 

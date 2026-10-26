@@ -11,6 +11,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  Mic,
   Pencil,
   Plus,
   ShieldAlert,
@@ -103,6 +104,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
         <NavLink to="/assessments" onClick={onNavigate} className={navLinkClasses}>
           <ClipboardCheck className="size-5" aria-hidden="true" />
           Quizzes &amp; exercises
+        </NavLink>
+        <NavLink to="/voice-questions" onClick={onNavigate} className={navLinkClasses}>
+          <Mic className="size-5" aria-hidden="true" />
+          Voice questions
         </NavLink>
         <NavLink to="/sessions" onClick={onNavigate} className={navLinkClasses}>
           <Video className="size-5" aria-hidden="true" />

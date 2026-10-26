@@ -23,8 +23,7 @@ function renderPanel() {
 }
 
 function clearRoot() {
-  delete root.dataset.textSize
-  delete root.dataset.contrast
+  for (const name of ['textSize', 'contrast', 'readable', 'links']) delete root.dataset[name]
 }
 
 beforeEach(() => {
@@ -38,24 +37,28 @@ describe('accessibility preferences', () => {
   it('ignores invalid or removed stored values', () => {
     expect(
       sanitizePreferences({ textSize: 'huge', highContrast: 'yes', reduceMotion: true }),
-    ).toEqual({ textSize: 'default', highContrast: false })
+    ).toEqual({ textSize: 'default', highContrast: false, readableFont: false, underlineLinks: false })
     window.localStorage.setItem(STORAGE_KEY, '{not json')
     expect(loadPreferences().textSize).toBe('default')
   })
 
   it('applies and removes attributes on the root element', () => {
-    applyPreferences({ textSize: 'large', highContrast: true })
-    expect(root.dataset.textSize).toBe('large')
-    expect(root.dataset.contrast).toBe('high')
+    applyPreferences({ textSize: 'large', highContrast: true, readableFont: true, underlineLinks: true })
+    expect(root.dataset).toMatchObject({
+      textSize: 'large',
+      contrast: 'high',
+      readable: 'true',
+      links: 'underline',
+    })
 
-    applyPreferences({ textSize: 'default', highContrast: false })
+    applyPreferences({ textSize: 'default', highContrast: false, readableFont: false, underlineLinks: false })
     expect(root.dataset.textSize).toBe('default')
-    expect(root.dataset.contrast).toBeUndefined()
+    for (const name of ['contrast', 'readable', 'links']) expect(root.dataset[name]).toBeUndefined()
   })
 })
 
 describe('AccessibilityPanel', () => {
-  it('opens from the button with text size and high contrast only', async () => {
+  it('opens from the button with text size and three display options', async () => {
     const user = userEvent.setup()
     renderPanel()
 
@@ -68,7 +71,11 @@ describe('AccessibilityPanel', () => {
       'x-large',
     ])
     expect(within(dialog).getByRole('radio', { name: /default/i })).toBeChecked()
-    expect(within(dialog).getAllByRole('switch')).toHaveLength(1)
+    expect(within(dialog).getAllByRole('switch').map((item) => item.name)).toEqual([
+      'highContrast',
+      'readableFont',
+      'underlineLinks',
+    ])
     expect(within(dialog).getByRole('switch', { name: /high contrast/i })).not.toBeChecked()
     expect(within(dialog).getByRole('button', { name: /reset to defaults/i })).toBeDisabled()
   })
@@ -80,11 +87,20 @@ describe('AccessibilityPanel', () => {
 
     await user.click(screen.getByRole('radio', { name: /extra large/i }))
     await user.click(screen.getByRole('switch', { name: /high contrast/i }))
+    await user.click(screen.getByRole('switch', { name: /dyslexia-friendly/i }))
+    await user.click(screen.getByRole('switch', { name: /underline links/i }))
 
-    expect(root.dataset).toMatchObject({ textSize: 'x-large', contrast: 'high' })
+    expect(root.dataset).toMatchObject({
+      textSize: 'x-large',
+      contrast: 'high',
+      readable: 'true',
+      links: 'underline',
+    })
     expect(JSON.parse(window.localStorage.getItem(STORAGE_KEY))).toEqual({
       textSize: 'x-large',
       highContrast: true,
+      readableFont: true,
+      underlineLinks: true,
     })
   })
 

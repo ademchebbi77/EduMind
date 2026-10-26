@@ -21,6 +21,7 @@ urlpatterns = [
     path("api/categories/", include("courses.category_urls")),
     path("api/course-enrollments/", include("courses.enrollment_urls")),
     path("api/", include("assessments.urls")),
+    path("api/voice-questions/", include("voice_qa.urls")),
     path("api/sessions/", include("sessions.urls")),
     path("api/enrollments/", include("sessions.enrollment_urls")),
     path("api/announcements/", include("announcements.urls")),

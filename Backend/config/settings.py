@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "accounts",
     "courses",
     "assessments",
+    "voice_qa",
     "sessions",
     "announcements",
 ]
@@ -196,6 +197,9 @@ RECOMMENDATION_AUTO_RETRAIN = env_bool("RECOMMENDATION_AUTO_RETRAIN", True)
 # jobs inside the web process when no Redis/worker is available (local dev only).
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
 CELERY_TASK_ALWAYS_EAGER = env_bool("CELERY_TASK_ALWAYS_EAGER", False)
+# Development only: `manage.py runserver` also starts Redis (Docker) and a Celery
+# worker, or runs jobs inline when Redis is unavailable. See config/dev_services.py.
+AUTO_START_BACKGROUND_SERVICES = env_bool("AUTO_START_BACKGROUND_SERVICES", DEBUG)
 CELERY_TASK_IGNORE_RESULT = True
 CELERY_TASK_ACKS_LATE = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
@@ -207,6 +211,27 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {"socket_connect_timeout": 3}
 # Local quiz generator (no external AI service).
 QUIZ_GENERATION_MAX_ACTIVE_JOBS = env_int("QUIZ_GENERATION_MAX_ACTIVE_JOBS", 3)
 QUIZ_GENERATION_STALE_MINUTES = env_int("QUIZ_GENERATION_STALE_MINUTES", 10)
+
+# Voice questions: OpenAI Whisper (speech-to-text) and Google Gemini (answers).
+# Keys stay on the server; the frontend never sees them.
+# Speech-to-text engine: "local" (free, open-source Whisper on this server) or
+# "openai" (paid Whisper API, needs OPENAI_API_KEY with credit).
+VOICE_QA_TRANSCRIPTION_PROVIDER = os.getenv("VOICE_QA_TRANSCRIPTION_PROVIDER", "local")
+VOICE_QA_WHISPER_MODEL = os.getenv("VOICE_QA_WHISPER_MODEL", "base")
+VOICE_QA_FFMPEG_TIMEOUT_SECONDS = env_int("VOICE_QA_FFMPEG_TIMEOUT_SECONDS", 120)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_TRANSCRIBE_MODEL = os.getenv("OPENAI_TRANSCRIBE_MODEL", "whisper-1")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+# Used automatically when the main model is overloaded or times out.
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")
+GEMINI_TIMEOUT_SECONDS = env_int("GEMINI_TIMEOUT_SECONDS", 45)
+VOICE_QA_MAX_AUDIO_MB = env_int("VOICE_QA_MAX_AUDIO_MB", 25)  # Whisper API limit
+VOICE_QA_MAX_RECORDING_SECONDS = env_int("VOICE_QA_MAX_RECORDING_SECONDS", 180)
+VOICE_QA_REQUEST_TIMEOUT_SECONDS = env_int("VOICE_QA_REQUEST_TIMEOUT_SECONDS", 60)
+VOICE_QA_CONTEXT_CHARS = env_int("VOICE_QA_CONTEXT_CHARS", 12000)
+VOICE_QA_MAX_ACTIVE = env_int("VOICE_QA_MAX_ACTIVE", 2)
+VOICE_QA_STALE_MINUTES = env_int("VOICE_QA_STALE_MINUTES", 10)
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

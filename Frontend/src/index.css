@@ -163,3 +163,26 @@ html[data-contrast="high"] :focus-visible {
   outline-width: 3px;
   outline-offset: 3px;
 }
+
+/* Dyslexia-friendly reading: OpenDyslexic with extra spacing. The font is
+   already wide, so letter/word spacing stay moderate; line height does most. */
+html[data-readable="true"] {
+  --font-sans: "OpenDyslexic", "Poppins", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "OpenDyslexic", "Poppins", ui-sans-serif, system-ui, sans-serif;
+}
+
+html[data-readable="true"] body * {
+  letter-spacing: 0.02em !important;
+  word-spacing: 0.08em !important;
+}
+
+html[data-readable="true"] :is(p, li, label, dd, dt, td, th, legend, textarea, input, select) {
+  line-height: 1.7;
+}
+
+/* Links recognisable without colour. */
+html[data-links="underline"] a {
+  text-decoration-line: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.2em;
+}

@@ -3,6 +3,7 @@ source =
     accounts
     courses
     assessments
+    voice_qa
 branch = True
 omit =
     */migrations/*
