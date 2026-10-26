@@ -80,6 +80,7 @@ function renderProvider() {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   Object.values(api).forEach((mock) => mock.mockReset())
 })
 

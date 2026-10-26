@@ -31,6 +31,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../../api/summaries', () => mocks)
 vi.mock('../../context/ToastContext', () => ({ useToast: () => ({ addToast: mocks.addToast }) }))
+vi.mock('../../context/AuthContext', () => ({
+  useAuth: () => ({ user: { id: 1, role: 'teacher' }, status: 'authenticated' }),
+}))
 vi.mock('../../hooks/useCourseOptions', () => ({
   useCourseOptions: () => ({ courses: [{ id: 1, title: 'Neural networks' }], loading: false, error: null }),
 }))

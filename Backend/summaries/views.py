@@ -79,7 +79,7 @@ class SummaryViewSet(CourseContentMixin, viewsets.ModelViewSet):
     queryset = Summary.objects.all()
     serializer_class = SummarySerializer
     search_fields = ["title", "content", "course__title"]
-    reader_actions = ("chat", "illustration")
+    reader_actions = ("chat",)
     ai_actions = ("generate", "illustration", "chat")
 
     @action(detail=False, methods=["post"])

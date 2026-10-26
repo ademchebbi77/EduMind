@@ -18,7 +18,7 @@ import { CourseChat } from '../../components/summaries/CourseChat'
 import { SummaryContent } from '../../components/summaries/SummaryContent'
 
 /** Explanatory picture: Gemini writes the prompt, then the image service draws it. */
-function Illustration({ summary, onChange, canGenerateIllustration = false }) {
+function Illustration({ summary, onChange }) {
   const { addToast } = useToast()
   const [busy, setBusy] = useState(false)
 
@@ -34,7 +34,7 @@ function Illustration({ summary, onChange, canGenerateIllustration = false }) {
     }
   }
 
-  if (!summary.illustration_url && !summary.can_edit && !canGenerateIllustration) return null
+  if (!summary.illustration_url && !summary.can_edit) return null
 
   return (
     <Card className="space-y-4">
@@ -43,7 +43,7 @@ function Illustration({ summary, onChange, canGenerateIllustration = false }) {
           <ImageIcon className="size-5 text-brand" aria-hidden="true" />
           Illustration
         </h2>
-        {(summary.can_edit || canGenerateIllustration) ? (
+        {summary.can_edit ? (
           <div className="flex gap-2">
             <Button variant="accent" size="sm" loading={busy} onClick={() => run(generateIllustration, 'Illustration created.')}>
               <Sparkles className="size-4" aria-hidden="true" />
@@ -227,7 +227,7 @@ export default function SummaryDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <Illustration summary={summary} onChange={setSummary} canGenerateIllustration={true} />
+          <Illustration summary={summary} onChange={setSummary} />
           <CourseChat summaryId={summary.id} />
         </div>
       </div>
