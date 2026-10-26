@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import {
   fetchSession, deleteSession, enrollInSession,
-  cancelEnrollment, fetchSessionEnrollments, updateEnrollmentStatus,
+  fetchSessionEnrollments, updateEnrollmentStatus,
 } from '../../api/sessions'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
@@ -285,10 +285,11 @@ export default function SessionDetailPage() {
         }
       >
         <div className="space-y-3">
-          <label className="block text-sm font-medium text-ink">
+          <label htmlFor="session-enroll-message" className="block text-sm font-medium text-ink">
             Message (optionnel)
           </label>
           <textarea
+            id="session-enroll-message"
             rows={3}
             value={enrollMessage}
             onChange={(e) => setEnrollMessage(e.target.value)}

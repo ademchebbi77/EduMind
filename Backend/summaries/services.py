@@ -12,8 +12,8 @@ import base64
 import io
 import json
 import logging
-import random
 import re
+import secrets
 import time
 import urllib.parse
 
@@ -279,7 +279,7 @@ class ImageGeneratorService:
 
     def _pollinations(self, prompt):
         url = POLLINATIONS_URL.format(prompt=urllib.parse.quote(prompt))
-        params = {"width": 1024, "height": 576, "nologo": "true", "seed": random.randint(1, 10**6)}
+        params = {"width": 1024, "height": 576, "nologo": "true", "seed": secrets.randbelow(10**6) + 1}
         try:
             response = httpx.get(
                 url, params=params, timeout=settings.SUMMARIES_IMAGE_TIMEOUT_SECONDS, follow_redirects=True

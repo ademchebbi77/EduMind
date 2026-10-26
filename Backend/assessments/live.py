@@ -11,7 +11,7 @@ The server decides everything: the countdown, whether an answer is correct and h
 many points it earns. Correct answers are only sent once the question is over.
 """
 
-import random
+import secrets
 
 from django.db import IntegrityError, transaction
 from django.db.models import F
@@ -66,7 +66,7 @@ def points_for(is_correct, elapsed_seconds):
 def new_pin():
     """A 6-digit PIN not used by another unfinished game."""
     while True:
-        pin = f"{random.randint(0, 999999):06d}"
+        pin = f"{secrets.randbelow(1_000_000):06d}"
         if not LiveGame.objects.filter(pin=pin).exclude(status=LiveGame.Status.FINISHED).exists():
             return pin
 

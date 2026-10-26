@@ -80,8 +80,9 @@ _TEXT_DATE = re.compile(
 )
 _RELATIVE_DATE = re.compile(r"\b(apres-demain|apres demain|aujourd'hui|demain)\b")
 _WEEKDAY_ONLY = re.compile(r"\b(?:ce |cette )?(" + _WEEKDAY + r")(\s+prochain)?\b")
+# Appliquée aux quelques mots qui précèdent une date, espaces déjà normalisés.
 _DEADLINE_BEFORE = re.compile(
-    r"(?:avant|jusqu'au|jusqu'a|date limite|au plus tard|delai|d'ici)\s*(?:le|au|:)?\s*$"
+    r"(?:avant|jusqu'au|jusqu'a|date limite|au plus tard|delai|d'ici)(?: le| au| ?:)?$"
 )
 
 _TIME_H = re.compile(r"\b(\d{1,2})\s*(?:h|heures?)\s*(\d{2})?\b")
@@ -146,7 +147,7 @@ def _quote(text, start, end):
 
 def _strip_decorations(line):
     """Retire puces, emojis et « : » final d'une ligne de titre."""
-    return re.sub(r"^[^\w«\"(]+|[\s:]+$", "", line).strip()
+    return re.sub(r"^[^\w«\"(]+", "", line).rstrip(" \t:").strip()
 
 
 def extract_title_and_content(text, folded):
@@ -287,7 +288,8 @@ def extract_date(text, folded, today):
 
     # Une date précédée de « avant le », « date limite »… est une échéance, pas l'événement.
     def is_deadline(start):
-        return bool(_DEADLINE_BEFORE.search(folded[max(0, start - 25):start]))
+        before = " ".join(folded[max(0, start - 25):start].split())
+        return bool(_DEADLINE_BEFORE.search(before))
 
     events = [item for item in candidates if not is_deadline(item[0])]
     start, end, value, confidence = (events or candidates)[0]

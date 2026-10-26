@@ -1,0 +1,13 @@
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+media/
+staticfiles/
+ml_models/
+.env
+.env.*

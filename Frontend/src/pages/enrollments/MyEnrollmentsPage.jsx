@@ -5,7 +5,6 @@ import {
   Clock, ClipboardList, ExternalLink, XCircle,
 } from 'lucide-react'
 import { fetchEnrollments, cancelEnrollment } from '../../api/sessions'
-import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
 import { formatDateTime } from '../../lib/format'
@@ -28,29 +27,27 @@ const STATUS_ICONS    = {
 export default function MyEnrollmentsPage() {
   useDocumentTitle('Mes inscriptions')
 
-  const { user } = useAuth()
   const { addToast } = useToast()
 
-  const [loading, setLoading]     = useState(true)
   const [enrollments, setEnrollments] = useState([])
-  const [error, setError]         = useState(null)
+  // Statut de la dernière requête ; « loading » tant qu'il ne correspond pas au rechargement courant.
+  const [fetchState, setFetchState] = useState({ key: null, error: null })
   const [reload, setReload]       = useState(0)
   const [toCancel, setToCancel]   = useState(null)
   const [cancelling, setCancelling] = useState(false)
+  const loading = fetchState.key !== reload
+  const error   = loading ? null : fetchState.error
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
     fetchEnrollments({}, { signal: controller.signal })
       .then((data) => {
         setEnrollments(Array.isArray(data) ? data : data.results ?? [])
-        setLoading(false)
+        setFetchState({ key: reload, error: null })
       })
       .catch((err) => {
         if (isCanceled(err)) return
-        setError(normalizeApiError(err))
-        setLoading(false)
+        setFetchState({ key: reload, error: normalizeApiError(err) })
       })
     return () => controller.abort()
   }, [reload])
@@ -96,7 +93,7 @@ export default function MyEnrollmentsPage() {
             { label: 'En attente', count: pending.length,   color: 'text-slate-500',    bg: 'bg-slate-100' },
             { label: 'Confirmées', count: confirmed.length, color: 'text-sage',         bg: 'bg-sage/10'   },
             { label: 'Rejetées',   count: rejected.length,  color: 'text-clay',         bg: 'bg-clay/10'   },
-          ].map(({ label, count, color, bg }) => (
+          ].map(({ label, count, color }) => (
             <Card key={label} className="text-center py-4">
               <p className={`text-2xl font-bold ${color}`}>{count}</p>
               <p className="text-xs text-slate-500 mt-1">{label}</p>

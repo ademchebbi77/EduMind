@@ -1,0 +1,23 @@
+# SonarQube Community Build for code quality analysis (local demo and CI).
+#
+#   docker compose -f docker-compose.sonarqube.yml up -d   ->  http://localhost:9000
+#   ./scripts/sonarqube-scan.sh                            ->  analysis + quality gate
+name: edumind-sonarqube
+
+services:
+  sonarqube:
+    image: sonarqube:26.9.0.129388-community
+    container_name: edumind-sonarqube
+    ports:
+      - "127.0.0.1:9000:9000"
+    environment:
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      - sonarqube-data:/opt/sonarqube/data
+      - sonarqube-extensions:/opt/sonarqube/extensions
+      - sonarqube-logs:/opt/sonarqube/logs
+
+volumes:
+  sonarqube-data:
+  sonarqube-extensions:
+  sonarqube-logs:

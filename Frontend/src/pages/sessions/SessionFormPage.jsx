@@ -14,6 +14,27 @@ import { Input, Select, Textarea } from '../../components/ui/Field'
 import { PageLoader } from '../../components/ui/Skeleton'
 import { BestTimePanel } from '../../components/sessions/BestTimePanel'
 
+function toLocalDateTimeInput(isoString) {
+  if (!isoString) return ''
+  const date = new Date(isoString)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function toDateInput(isoString) {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function toTimeInput(isoString) {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export default function SessionFormPage() {
   const { sessionId } = useParams()
   const isEdit = Boolean(sessionId)
@@ -103,27 +124,6 @@ export default function SessionFormPage() {
       })
     return () => controller.abort()
   }, [isEdit, sessionId, requestKey])
-
-  function toLocalDateTimeInput(isoString) {
-    if (!isoString) return ''
-    const date = new Date(isoString)
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-  }
-
-  function toDateInput(isoString) {
-    if (!isoString) return ''
-    const d = new Date(isoString)
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-  }
-
-  function toTimeInput(isoString) {
-    if (!isoString) return ''
-    const d = new Date(isoString)
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}`
-  }
 
   // Recalcule starts_at et ends_at à partir de date + start_time + duration
   function computeDateTimes(date, start_time, duration) {

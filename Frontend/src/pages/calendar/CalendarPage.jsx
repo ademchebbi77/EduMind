@@ -43,10 +43,13 @@ export default function CalendarPage() {
   const [year, setYear]   = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth())
 
-  const [sessions, setSessions]   = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState(null)
+  // Résultat de la dernière requête ; « loading » tant qu'il ne correspond pas au mois affiché.
+  const [result, setResult]       = useState({ key: null, sessions: [], error: null })
   const [reload, setReload]       = useState(0)
+  const requestKey = `${year}-${month}:${reload}`
+  const loading  = result.key !== requestKey
+  const sessions = result.sessions
+  const error    = loading ? null : result.error
 
   // Modal d'inscription
   const [enrollTarget, setEnrollTarget]   = useState(null)  // session sélectionnée
@@ -58,23 +61,19 @@ export default function CalendarPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
 
     const bounds = monthBounds(year, month)
     fetchCalendarSessions(bounds, { signal: controller.signal })
       .then((data) => {
-        setSessions(Array.isArray(data) ? data : data.results ?? [])
-        setLoading(false)
+        setResult({ key: requestKey, sessions: Array.isArray(data) ? data : data.results ?? [], error: null })
       })
       .catch((err) => {
         if (isCanceled(err)) return
-        setError(normalizeApiError(err))
-        setLoading(false)
+        setResult((current) => ({ key: requestKey, sessions: current.sessions, error: normalizeApiError(err) }))
       })
 
     return () => controller.abort()
-  }, [year, month, reload])
+  }, [year, month, requestKey])
 
   function prevMonth() {
     if (month === 0) { setYear((y) => y - 1); setMonth(11) }

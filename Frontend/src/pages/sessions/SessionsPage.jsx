@@ -33,9 +33,8 @@ export default function SessionsPage() {
   const [reload, setReload]       = useState(0)
   const [sessionToDelete, setSessionToDelete] = useState(null)
 
-  const [loading, setLoading] = useState(true)
-  const [data, setData]       = useState(EMPTY_RESULTS)
-  const [error, setError]     = useState(null)
+  // Résultat de la dernière requête ; « loading » tant qu'il ne correspond pas à la requête courante.
+  const [result, setResult]   = useState({ key: null, data: EMPTY_RESULTS, error: null })
 
   const [recommended, setRecommended]           = useState([])
   const [recommendedFailed, setRecommendedFailed] = useState(false)
@@ -53,23 +52,22 @@ export default function SessionsPage() {
     page,
   }), [debouncedSearch, type, statusFilter, page])
 
+  const requestKey = `${JSON.stringify(query)}:${reload}`
+
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
     fetchSessions(query, { signal: controller.signal })
-      .then((res) => {
-        setData(res)
-        setLoading(false)
-      })
+      .then((res) => setResult({ key: requestKey, data: res, error: null }))
       .catch((err) => {
         if (isCanceled(err)) return
-        setError(normalizeApiError(err))
-        setData(EMPTY_RESULTS)
-        setLoading(false)
+        setResult({ key: requestKey, data: EMPTY_RESULTS, error: normalizeApiError(err) })
       })
     return () => controller.abort()
-  }, [query, reload])
+  }, [query, requestKey])
+
+  const loading = result.key !== requestKey
+  const data    = result.data
+  const error   = loading ? null : result.error
 
   useEffect(() => {
     if (!isStudent) return undefined

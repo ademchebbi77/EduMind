@@ -1,0 +1,106 @@
+# Whole EduMind application in Docker: PostgreSQL, Redis, Django API, Celery worker
+# and the React app served by Nginx.
+#
+#   docker compose up -d --build      ->  http://localhost:8080
+#
+# Optional variables are read from the root .env (API keys) or the shell.
+name: edumind
+
+x-backend-env: &backend-env
+  SECRET_KEY: ${DOCKER_SECRET_KEY:-docker-local-secret-key-change-me-for-any-real-deployment}
+  DEBUG: "False"
+  ALLOWED_HOSTS: localhost,127.0.0.1,backend
+  CSRF_TRUSTED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+  CORS_ALLOWED_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+  DB_NAME: edumind
+  DB_USER: edumind
+  DB_PASSWORD: ${DOCKER_DB_PASSWORD:-edumind_docker_password}
+  DB_HOST: db
+  DB_PORT: "5432"
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_TASK_ALWAYS_EAGER: "False"
+  AUTO_START_BACKGROUND_SERVICES: "False"
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  COHERE_API_KEY: ${COHERE_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  METRICS_TOKEN: ${METRICS_TOKEN:-}
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: edumind
+      POSTGRES_USER: edumind
+      POSTGRES_PASSWORD: ${DOCKER_DB_PASSWORD:-edumind_docker_password}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edumind -d edumind"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./Backend
+    image: edumind-backend:latest
+    restart: unless-stopped
+    environment:
+      <<: *backend-env
+      SEED_DEMO: ${SEED_DEMO:-1}
+    volumes:
+      - media:/app/media
+      - static:/app/staticfiles
+      - model-cache:/home/edumind/.cache
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: edumind-backend:latest
+    restart: unless-stopped
+    command: ["celery", "-A", "config", "worker", "--loglevel=info", "--concurrency=2"]
+    environment:
+      <<: *backend-env
+      RUN_MIGRATIONS: "0"
+    volumes:
+      - media:/app/media
+      - model-cache:/home/edumind/.cache
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping --timeout 5 || exit 1"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 5
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    build: ./Frontend
+    image: edumind-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - static:/usr/share/nginx/static:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  media:
+  static:
+  model-cache:

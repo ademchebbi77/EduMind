@@ -41,46 +41,42 @@ export default function AnnouncementDetailPage() {
   const { addToast } = useToast()
 
   const [reload, setReload]         = useState(0)
-  const [loading, setLoading]       = useState(true)
   const [announcement, setAnnouncement] = useState(null)
-  const [error, setError]           = useState(null)
+  // Statut de la dernière requête ; « loading » tant qu'il ne correspond pas à la requête courante.
+  const [fetchState, setFetchState] = useState({ key: null, error: null })
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting]     = useState(false)
 
-  // Inscription
+  // Inscription (pré-remplie avec les infos de l'utilisateur connecté)
   const [enrollModalOpen, setEnrollModalOpen] = useState(false)
-  const [enrollForm, setEnrollForm] = useState({ full_name: '', email: '', phone: '', message: '' })
+  const [enrollForm, setEnrollForm] = useState(() => ({
+    full_name: user ? user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() : '',
+    email:     user?.email || '',
+    phone:     '',
+    message:   '',
+  }))
   const [enrollErrors, setEnrollErrors] = useState({})
   const [enrolling, setEnrolling]     = useState(false)
   const [isEnrolled, setIsEnrolled]   = useState(false)
 
+  const requestKey = `${announcementId}:${reload}`
+
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
     fetchAnnouncement(announcementId, { signal: controller.signal })
       .then((data) => {
         setAnnouncement(data)
-        setLoading(false)
+        setFetchState({ key: requestKey, error: null })
       })
       .catch((err) => {
         if (isCanceled(err)) return
-        setError(normalizeApiError(err))
-        setLoading(false)
+        setFetchState({ key: requestKey, error: normalizeApiError(err) })
       })
     return () => controller.abort()
-  }, [announcementId, reload])
+  }, [announcementId, requestKey])
 
-  // Pré-remplir le formulaire avec les infos de l'utilisateur connecté
-  useEffect(() => {
-    if (user) {
-      setEnrollForm((f) => ({
-        ...f,
-        full_name: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        email:     user.email || '',
-      }))
-    }
-  }, [user])
+  const loading = fetchState.key !== requestKey
+  const error   = loading ? null : fetchState.error
 
   useDocumentTitle(announcement?.title || 'Annonce')
 

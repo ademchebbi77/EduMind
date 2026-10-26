@@ -25,10 +25,12 @@ export default function EnrollmentsAdminPage() {
 
   const { addToast } = useToast()
 
-  const [loading, setLoading]         = useState(true)
   const [enrollments, setEnrollments] = useState([])
-  const [error, setError]             = useState(null)
+  // Statut de la dernière requête ; « loading » tant qu'il ne correspond pas au rechargement courant.
+  const [fetchState, setFetchState]   = useState({ key: null, error: null })
   const [reload, setReload]           = useState(0)
+  const loading = fetchState.key !== reload
+  const error   = loading ? null : fetchState.error
   const [search, setSearch]           = useState('')
   const [statusFilter, setStatus]     = useState('')
   const [updatingId, setUpdatingId]   = useState(null)
@@ -37,17 +39,14 @@ export default function EnrollmentsAdminPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    setLoading(true)
-    setError(null)
     fetchEnrollments({}, { signal: controller.signal })
       .then((data) => {
         setEnrollments(Array.isArray(data) ? data : data.results ?? [])
-        setLoading(false)
+        setFetchState({ key: reload, error: null })
       })
       .catch((err) => {
         if (isCanceled(err)) return
-        setError(normalizeApiError(err))
-        setLoading(false)
+        setFetchState({ key: reload, error: normalizeApiError(err) })
       })
     return () => controller.abort()
   }, [reload])

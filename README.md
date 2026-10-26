@@ -301,6 +301,61 @@ avant tout partage de la machine.
 
 ---
 
+## Docker, intégration continue et SonarQube
+
+### Lancer toute l'application avec Docker
+
+Seul Docker Desktop est nécessaire (ni Python, ni Node, ni PostgreSQL) :
+
+```bash
+docker compose up -d --build        # premier lancement : quelques minutes
+```
+
+Ouvrez **http://localhost:8080** et connectez-vous avec un compte de démonstration
+(`teacher@edumind.local` / `EduMind!2026`). Conteneurs : `db` (PostgreSQL 17),
+`redis`, `backend` (Django + Gunicorn, applique les migrations au démarrage),
+`worker` (Celery) et `frontend` (Nginx : application React + proxy `/api` et
+`/admin`). Les clés API (`GEMINI_API_KEY`…) sont lues dans le `.env` racine si elles
+existent. Comptes de démonstration créés avec `SEED_DEMO=1` (par défaut) : à mettre à
+`0` hors démonstration locale.
+
+```bash
+bash scripts/smoke-test.sh          # vérifie page, API, fichiers statiques, connexion
+docker compose logs -f backend      # journaux
+docker compose down                 # arrêt (ajouter -v pour effacer les données)
+```
+
+### Pipeline GitHub Actions (`.github/workflows/ci.yml`)
+
+À chaque push sur `main` et à chaque pull request :
+
+| Job | Contenu |
+| --- | --- |
+| **Backend tests** | `manage.py check`, migrations à jour, tests Django avec couverture (service PostgreSQL) |
+| **Frontend** | ESLint, tests Vitest avec couverture, build de production |
+| **SonarQube analysis** | démarre SonarQube dans Docker, analyse le code avec les deux couvertures et applique la quality gate |
+| **Docker** | construit les deux images, lance toute l'application et exécute `scripts/smoke-test.sh` |
+
+Le résumé de chaque exécution affiche la couverture et le résultat SonarQube ; le
+rapport des problèmes SonarQube est joint en artefact (`sonarqube-report`).
+
+### Analyse SonarQube en local (démonstration)
+
+```bash
+docker compose -f docker-compose.sonarqube.yml up -d    # http://localhost:9000 (admin / admin)
+cd Backend && coverage run manage.py test && coverage xml && cd ..
+cd Frontend && npx vitest run --coverage --coverage.reporter=lcov && cd ..
+bash scripts/sonarqube-scan.sh
+```
+
+Quality gate **EduMind** (sur tout le code, car le serveur de la CI est neuf à chaque
+exécution) : sécurité A, maintenabilité A, fiabilité C ou mieux, couverture ≥ 70 %,
+duplication ≤ 5 %. Les points examinés et acceptés sont listés avec leur justification
+dans `sonar-project.properties`. Si vous changez le mot de passe `admin` dans
+l'interface, lancez le script avec `SONAR_ADMIN_PASSWORD=...`.
+
+---
+
 ## Après un `git pull` : lancer tous les modules
 
 À faire après chaque `git pull` qui modifie le projet. Ces étapes couvrent aussi les

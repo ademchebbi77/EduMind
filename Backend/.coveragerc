@@ -1,9 +1,8 @@
 [run]
-source =
-    accounts
-    courses
-    assessments
-    voice_qa
+# Every Django app; file paths stay relative to Backend/ so CI tools (SonarQube)
+# can match them.
+source = .
+relative_files = True
 branch = True
 omit =
     */migrations/*

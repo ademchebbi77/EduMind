@@ -159,7 +159,7 @@ class LiveGameTests(TemporaryMediaMixin, APITestCase):
         self.assertEqual(self.client.post("/api/live-games/", {"quiz": empty.pk}, format="json").status_code, 400)
 
     def test_pins_are_unique_among_running_games(self):
-        with mock.patch("assessments.live.random.randint", side_effect=[123456, 123456, 654321]):
+        with mock.patch("assessments.live.secrets.randbelow", side_effect=[123456, 123456, 654321]):
             first = self.create_game()
             second = self.create_game()
         self.assertEqual((first["pin"], second["pin"]), ("123456", "654321"))
