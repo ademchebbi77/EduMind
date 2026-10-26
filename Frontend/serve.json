@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://edumind-backend-dhfy.onrender.com/api/:path*"
+    }
+  ],
+  "redirects": [],
+  "headers": [],
+  "cleanUrls": false,
+  "trailingSlash": false
+}

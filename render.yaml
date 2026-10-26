@@ -5,6 +5,7 @@ services:
     runtime: python
     rootDir: Backend
     buildCommand: "./build.sh"
+    preDeployCommand: "python manage.py shell -c \"from accounts.models import User; User.objects.filter(email='admin@edumind.com').exists() or User.objects.create_superuser(email='admin@edumind.com', password='Admin123!', first_name='Admin', last_name='Admin', role='admin')\""
     startCommand: "gunicorn config.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
     envVars:
       - key: SECRET_KEY
