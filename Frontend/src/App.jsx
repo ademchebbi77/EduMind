@@ -12,6 +12,7 @@ import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import CourseDetailPage from './pages/courses/CourseDetailPage'
 import CourseFormPage from './pages/courses/CourseFormPage'
+import LessonPlayerPage from './pages/courses/LessonPlayerPage'
 import CoursesPage from './pages/courses/CoursesPage'
 import MyCoursesPage from './pages/courses/MyCoursesPage'
 import CourseEnrollmentsPage from './pages/courses/CourseEnrollmentsPage'
@@ -113,6 +114,15 @@ export default function App() {
                   }
                 />
                 <Route path="/courses/:courseId" element={<CourseDetailPage />} />
+                <Route path="/courses/:courseId/lessons/:lessonId" element={<LessonPlayerPage />} />
+                <Route
+                  path="/courses/:courseId/lessons/manage"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <CourseFormPage />
+                    </RequireRole>
+                  }
+                />
                 <Route
                   path="/courses/:courseId/edit"
                   element={

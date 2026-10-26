@@ -5,7 +5,7 @@ from django.db.models.functions import Greatest
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Course, Enrollment
+from .models import Course, Enrollment, Lesson
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +21,21 @@ def delete_course_file(sender, instance, **kwargs):
             logger.exception(
                 "Impossible de supprimer un fichier du cours %s", instance.pk
             )
+
+
+@receiver(post_delete, sender=Lesson)
+def delete_lesson_file(sender, instance, **kwargs):
+    if instance.file:
+        try:
+            instance.file.delete(save=False)
+        except Exception:
+            logger.exception(
+                "Unable to delete the file of lesson %s", instance.pk
+            )
+
+    course = Course.objects.filter(pk=instance.course_id).first()
+    if course is not None:
+        course.sync_type_from_lessons()
 
 
 @receiver(post_save, sender=Enrollment)

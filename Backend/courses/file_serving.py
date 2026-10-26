@@ -67,6 +67,15 @@ def build_course_file_response(request, course, as_attachment: bool):
     )
 
 
+def build_lesson_file_response(request, lesson, as_attachment: bool):
+    return build_file_response(
+        request,
+        lesson.file,
+        _display_filename(lesson.file, lesson.title, "lesson"),
+        as_attachment,
+    )
+
+
 def build_file_response(request, field_file, filename, as_attachment: bool, content_type=None):
     """Serve a private stored file with HTTP Range support."""
     if not field_file:

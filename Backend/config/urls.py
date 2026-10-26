@@ -17,6 +17,10 @@ urlpatterns = [
         ExerciseViewSet.as_view({"get": "list"}),
         name="course-exercises",
     ),
+    path(
+        "api/courses/<int:course_id>/lessons/",
+        include("courses.lesson_urls"),
+    ),
     path("api/courses/", include("courses.urls")),
     path("api/categories/", include("courses.category_urls")),
     path("api/course-enrollments/", include("courses.enrollment_urls")),

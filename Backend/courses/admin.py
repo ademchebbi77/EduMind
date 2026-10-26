@@ -6,6 +6,8 @@ from .models import (
     CourseProgress,
     CourseTranscript,
     Enrollment,
+    Lesson,
+    LessonCompletion,
 )
 
 
@@ -77,6 +79,47 @@ class CourseProgressAdmin(admin.ModelAdmin):
         "completed_at",
     )
     list_select_related = ("enrollment", "enrollment__course", "enrollment__student")
+
+
+@admin.register(Lesson)
+class LessonAdmin(admin.ModelAdmin):
+    list_display = (
+        "title",
+        "course",
+        "order",
+        "file_type",
+        "video_url",
+        "duration_minutes",
+        "is_published",
+        "created_at",
+    )
+    list_filter = ("file_type", "is_published", "created_at")
+    search_fields = ("title", "description", "course__title")
+    readonly_fields = ("file_type", "created_at", "updated_at")
+    list_select_related = ("course",)
+    autocomplete_fields = ("course",)
+    ordering = ("course", "order")
+
+
+@admin.register(LessonCompletion)
+class LessonCompletionAdmin(admin.ModelAdmin):
+    list_display = (
+        "lesson",
+        "student",
+        "completed",
+        "completed_at",
+        "time_spent_seconds",
+    )
+    list_filter = ("completed", "created_at")
+    search_fields = (
+        "lesson__title",
+        "lesson__course__title",
+        "student__email",
+    )
+    readonly_fields = ("created_at",)
+    list_select_related = ("lesson", "lesson__course", "student")
+    autocomplete_fields = ("lesson", "student")
+    ordering = ("-completed_at",)
 
 
 @admin.register(CourseTranscript)

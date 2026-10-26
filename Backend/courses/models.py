@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.text import slugify
@@ -24,6 +25,11 @@ def course_upload_path(instance, filename):
 def course_thumbnail_path(instance, filename):
     extension = Path(filename).suffix.lower()
     return f"course_thumbnails/{uuid.uuid4().hex}{extension}"
+
+
+def lesson_upload_path(instance, filename):
+    extension = Path(filename).suffix.lower()
+    return f"course_lessons/{uuid.uuid4().hex}{extension}"
 
 
 class Category(models.Model):
@@ -149,6 +155,67 @@ class Course(models.Model):
             return False
         return not self.enrollments.filter(student=user).exists()
 
+    def lesson_progress_for(self, student):
+        """Summarise sequential lesson progress for one student.
+
+        A lesson is unlocked when every published lesson before it has been
+        completed; completed lessons stay accessible even after a reorder.
+        """
+        lessons = list(
+            self.lessons.filter(is_published=True).order_by("order")
+        )
+        total = len(lessons)
+        if total == 0:
+            return {
+                "total_lessons": 0,
+                "completed_lessons": 0,
+                "locked_lessons": 0,
+                "percentage": 0,
+                "statuses": {},
+            }
+
+        completions = LessonCompletion.objects.filter(
+            lesson__course=self, student=student, completed=True
+        ).values_list("lesson_id", "completed_at")
+        completed_at_by_id = dict(completions)
+        completed_ids = set(completed_at_by_id)
+
+        statuses = {}
+        previous_completed = True
+        completed_count = 0
+        locked_count = 0
+        for lesson in lessons:
+            is_completed = lesson.id in completed_ids
+            is_locked = not previous_completed and not is_completed
+            statuses[lesson.id] = {
+                "is_locked": is_locked,
+                "is_completed": is_completed,
+                "completed_at": completed_at_by_id.get(lesson.id),
+            }
+            previous_completed = is_completed
+            completed_count += 1 if is_completed else 0
+            locked_count += 1 if is_locked else 0
+
+        return {
+            "total_lessons": total,
+            "completed_lessons": completed_count,
+            "locked_lessons": locked_count,
+            "percentage": round(completed_count * 100 / total, 2),
+            "statuses": statuses,
+        }
+
+    def sync_type_from_lessons(self):
+        """Reflect the first lesson's format in the course type badge."""
+        first_type = (
+            self.lessons.order_by("order")
+            .values_list("file_type", flat=True)
+            .first()
+        )
+        if first_type and first_type != self.type:
+            Course.objects.filter(pk=self.pk).update(type=first_type)
+            self.type = first_type
+        return self.type
+
     def __str__(self):
         return self.title
 
@@ -183,6 +250,139 @@ class Enrollment(models.Model):
         return f"{self.student} → {self.course}"
 
 
+class Lesson(models.Model):
+    class FileType(models.TextChoices):
+        PDF = "pdf", "PDF"
+        AUDIO = "audio", "Audio"
+        VIDEO = "video", "Video"
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name="lessons",
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    order = models.PositiveIntegerField()
+    file = models.FileField(
+        upload_to=lesson_upload_path,
+        validators=[validate_course_file],
+        blank=True,
+    )
+    video_url = models.URLField(max_length=500, blank=True)
+    file_type = models.CharField(
+        max_length=10,
+        choices=FileType.choices,
+        editable=False,
+    )
+    duration_minutes = models.PositiveIntegerField(null=True, blank=True)
+    is_published = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = "lesson"
+        verbose_name_plural = "lessons"
+        unique_together = [["course", "order"]]
+        indexes = [
+            models.Index(fields=["course", "order"]),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.file and not self.video_url:
+            raise ValidationError(
+                "Provide a lesson file or a YouTube/Vimeo link."
+            )
+
+    def save(self, *args, **kwargs):
+        if self.file:
+            extension = Path(self.file.name).suffix.lower().lstrip(".")
+            if extension in VIDEO_EXTENSIONS:
+                self.file_type = self.FileType.VIDEO
+            elif extension in PDF_EXTENSIONS:
+                self.file_type = self.FileType.PDF
+            else:
+                self.file_type = self.FileType.AUDIO
+        elif self.video_url:
+            self.file_type = self.FileType.VIDEO
+        super().save(*args, **kwargs)
+
+        # A lesson-based course borrows the type of its first lesson so the
+        # catalogue keeps a meaningful format badge.
+        course = self.course
+        if course is not None:
+            course.sync_type_from_lessons()
+
+    def previous_published(self):
+        previous = (
+            self.course.lessons.filter(
+                is_published=True, order__lt=self.order
+            )
+            .order_by("-order")
+            .first()
+        )
+        return previous
+
+    def is_locked_for(self, student):
+        """A lesson is locked unless it is completed or everything before it is."""
+        if LessonCompletion.objects.filter(
+            lesson=self, student=student, completed=True
+        ).exists():
+            return False
+        previous = self.previous_published()
+        if previous is None:
+            return False
+        return not LessonCompletion.objects.filter(
+            lesson=previous, student=student, completed=True
+        ).exists()
+
+    def mark_completed(self, student):
+        completion, _ = LessonCompletion.objects.get_or_create(
+            lesson=self, student=student
+        )
+        if not completion.completed:
+            completion.completed = True
+            completion.completed_at = timezone.now()
+            completion.save(update_fields=["completed", "completed_at"])
+        return completion
+
+    def __str__(self):
+        return f"{self.course.title} — {self.order}. {self.title}"
+
+
+class LessonCompletion(models.Model):
+    lesson = models.ForeignKey(
+        Lesson,
+        on_delete=models.CASCADE,
+        related_name="completions",
+    )
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="lesson_completions",
+        limit_choices_to={"role": User.Role.STUDENT},
+    )
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    time_spent_seconds = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-completed_at"]
+        verbose_name = "lesson completion"
+        verbose_name_plural = "lesson completions"
+        unique_together = [["lesson", "student"]]
+        indexes = [
+            models.Index(fields=["lesson", "student"]),
+            models.Index(fields=["student", "completed"]),
+        ]
+
+    def __str__(self):
+        return f"{self.student} — {self.lesson}"
+
+
 class CourseProgress(models.Model):
     enrollment = models.OneToOneField(
         Enrollment,
@@ -207,10 +407,13 @@ class CourseProgress(models.Model):
 
     @property
     def percentage(self):
+        course = self.enrollment.course
+        if course.lessons.exists():
+            return course.lesson_progress_for(self.enrollment.student)[
+                "percentage"
+            ]
         if self.completed:
             return 100
-
-        course = self.enrollment.course
         if course.type in {Course.Type.VIDEO, Course.Type.AUDIO}:
             if self.video_duration_seconds:
                 watched = min(

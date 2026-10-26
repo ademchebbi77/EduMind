@@ -53,11 +53,15 @@ class CourseSerializerTests(TemporaryMediaMixin, TestCase):
 
         self.assertEqual(course.description, "")
 
-    def test_file_is_required_on_create(self):
-        serializer = CourseSerializer(data={"title": "Sans fichier"})
+    def test_file_is_optional_so_lesson_courses_can_be_created(self):
+        serializer = CourseSerializer(data={"title": "Cours à leçons"})
 
-        self.assertFalse(serializer.is_valid())
-        self.assertIn("file", serializer.errors)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+        course = serializer.save(owner=self.teacher)
+
+        self.assertEqual(course.title, "Cours à leçons")
+        self.assertFalse(bool(course.file))
 
     def test_blank_title_is_rejected(self):
         serializer = CourseSerializer(

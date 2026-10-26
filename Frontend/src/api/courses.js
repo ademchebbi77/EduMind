@@ -158,3 +158,47 @@ export async function generateCourseTranscript(courseId, { language = 'en' } = {
   const { data } = await api.post(`/courses/${courseId}/transcript/`, { language })
   return data
 }
+
+export async function fetchLessons(courseId, { signal } = {}) {
+  const { data } = await api.get(`/courses/${courseId}/lessons/`, { signal })
+  return data
+}
+
+export async function createLesson(courseId, formData, { onUploadProgress } = {}) {
+  const { data } = await api.post(`/courses/${courseId}/lessons/`, formData, {
+    onUploadProgress,
+    timeout: 0,
+  })
+  return data
+}
+
+export async function updateLesson(courseId, lessonId, formData, { onUploadProgress } = {}) {
+  const { data } = await api.patch(`/courses/${courseId}/lessons/${lessonId}/`, formData, {
+    onUploadProgress,
+    timeout: 0,
+  })
+  return data
+}
+
+export async function deleteLesson(courseId, lessonId) {
+  await api.delete(`/courses/${courseId}/lessons/${lessonId}/`)
+}
+
+export async function reorderLessons(courseId, lessonIds) {
+  const { data } = await api.post(`/courses/${courseId}/lessons/reorder/`, {
+    lesson_ids: lessonIds,
+  })
+  return data
+}
+
+export async function completeLesson(courseId, lessonId, { timeSpentSeconds = 0 } = {}) {
+  const { data } = await api.post(`/courses/${courseId}/lessons/${lessonId}/complete/`, {
+    time_spent_seconds: timeSpentSeconds,
+  })
+  return data
+}
+
+export async function fetchLessonProgress(courseId, { signal } = {}) {
+  const { data } = await api.get(`/courses/${courseId}/lessons/my-progress/`, { signal })
+  return data
+}

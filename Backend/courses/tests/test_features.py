@@ -317,17 +317,19 @@ class CourseMetadataApiTests(CourseFeatureTestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("video_url", response.json()["error"]["fields"])
 
-    def test_course_requires_a_file_or_video_url(self):
+    def test_course_can_be_created_without_a_file_for_lessons(self):
         self.client.force_login(self.teacher)
 
         response = self.client.post(
             COURSE_URL,
-            {"title": "Sans contenu"},
+            {"title": "Cours à leçons"},
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("file", response.json()["error"]["fields"])
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.json()
+        self.assertFalse(data["has_file"])
+        self.assertEqual(data["lesson_count"], 0)
 
     def test_thumbnail_dimensions_are_limited(self):
         self.client.force_login(self.teacher)

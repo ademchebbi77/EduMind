@@ -13,6 +13,8 @@ from .models import (
     CourseProgress,
     CourseTranscript,
     Enrollment,
+    Lesson,
+    LessonCompletion,
 )
 from .validators import validate_course_file, validate_thumbnail
 
@@ -328,6 +330,166 @@ class CourseProgressUpdateSerializer(serializers.Serializer):
         return attrs
 
 
+class LessonSerializer(serializers.ModelSerializer):
+    file = serializers.FileField(
+        write_only=True,
+        required=False,
+        validators=[validate_course_file],
+    )
+    file_url = serializers.SerializerMethodField()
+    file_type = serializers.CharField(read_only=True)
+    is_locked = serializers.SerializerMethodField()
+    is_completed = serializers.SerializerMethodField()
+    completed_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Lesson
+        fields = (
+            "id",
+            "course",
+            "title",
+            "description",
+            "order",
+            "file",
+            "file_url",
+            "file_type",
+            "video_url",
+            "duration_minutes",
+            "is_published",
+            "is_locked",
+            "is_completed",
+            "completed_at",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = (
+            "id",
+            "course",
+            "file_type",
+            "created_at",
+            "updated_at",
+        )
+        extra_kwargs = {
+            "order": {"required": False, "min_value": 1},
+            "is_published": {"required": False, "default": True},
+        }
+
+    def _student(self):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated and user.role == User.Role.STUDENT:
+            return user
+        return None
+
+    def _status_for(self, obj):
+        statuses = self.context.get("lesson_statuses") or {}
+        return statuses.get(obj.pk)
+
+    def _completion(self, obj):
+        student = self._student()
+        if student is None:
+            return None
+        return LessonCompletion.objects.filter(
+            lesson=obj, student=student, completed=True
+        ).first()
+
+    def get_file_url(self, obj):
+        if not obj.file:
+            return None
+        return reverse(
+            "lesson-file", kwargs={"course_id": obj.course_id, "pk": obj.pk}
+        )
+
+    def get_is_completed(self, obj):
+        status = self._status_for(obj)
+        if status:
+            return status["is_completed"]
+        return self._completion(obj) is not None
+
+    def get_is_locked(self, obj):
+        status = self._status_for(obj)
+        if status:
+            return status["is_locked"]
+        student = self._student()
+        if student is None:
+            return False
+        return obj.is_locked_for(student)
+
+    def get_completed_at(self, obj):
+        status = self._status_for(obj)
+        if status:
+            return status.get("completed_at")
+        completion = self._completion(obj)
+        return completion.completed_at if completion else None
+
+    def validate_order(self, value):
+        if value < 1:
+            raise serializers.ValidationError(
+                "The order must be at least 1."
+            )
+        return value
+
+    def validate_video_url(self, value):
+        if not value:
+            return value
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise serializers.ValidationError(
+                "Enter a valid YouTube or Vimeo URL."
+            )
+        if not _is_supported_video_host(parsed.hostname):
+            raise serializers.ValidationError(
+                "Only YouTube and Vimeo links are supported."
+            )
+        return value
+
+    def validate(self, attrs):
+        file = attrs.get("file")
+        video_url = attrs.get("video_url")
+        if self.instance is not None:
+            if "file" not in attrs:
+                file = self.instance.file
+            if "video_url" not in attrs:
+                video_url = self.instance.video_url
+        if not file and not video_url:
+            raise serializers.ValidationError(
+                {"file": "Upload a file or provide a YouTube/Vimeo link."}
+            )
+        return attrs
+
+    def _delete_stored_file(self, field_file):
+        if not field_file:
+            return
+        try:
+            if field_file.storage.exists(field_file.name):
+                field_file.storage.delete(field_file.name)
+        except Exception:
+            logger.exception("Unable to delete a replaced lesson file")
+
+    def update(self, instance, validated_data):
+        old_file = instance.file if instance.file else None
+        updated = super().update(instance, validated_data)
+
+        new_file = validated_data.get("file")
+        if new_file and old_file and old_file.name != updated.file.name:
+            self._delete_stored_file(old_file)
+
+        return updated
+
+
+class LessonReorderSerializer(serializers.Serializer):
+    lesson_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+    )
+
+
+class LessonCompleteSerializer(serializers.Serializer):
+    time_spent_seconds = serializers.IntegerField(
+        min_value=0, required=False, default=0
+    )
+
+
 class CourseSerializer(serializers.ModelSerializer):
     file = serializers.FileField(
         write_only=True,
@@ -366,6 +528,10 @@ class CourseSerializer(serializers.ModelSerializer):
     is_full = serializers.BooleanField(read_only=True)
     is_enrolled = serializers.SerializerMethodField()
     can_enroll = serializers.SerializerMethodField()
+    lessons = serializers.SerializerMethodField()
+    lesson_count = serializers.SerializerMethodField()
+    completed_lessons = serializers.SerializerMethodField()
+    progress_percentage = serializers.SerializerMethodField()
 
     class Meta:
         model = Course
@@ -395,6 +561,10 @@ class CourseSerializer(serializers.ModelSerializer):
             "is_full",
             "is_enrolled",
             "can_enroll",
+            "lessons",
+            "lesson_count",
+            "completed_lessons",
+            "progress_percentage",
             "created_at",
             "updated_at",
         )
@@ -405,6 +575,56 @@ class CourseSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         )
+
+    def _student(self):
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user and user.is_authenticated and user.role == User.Role.STUDENT:
+            return user
+        return None
+
+    def get_lessons(self, obj):
+        if not self.context.get("include_lessons"):
+            return []
+        lessons = list(obj.lessons.all())
+        if self._student() is not None:
+            lessons = [lesson for lesson in lessons if lesson.is_published]
+        context = dict(self.context)
+        context.setdefault(
+            "lesson_statuses",
+            self.context.get("lesson_statuses") or {},
+        )
+        return LessonSerializer(lessons, many=True, context=context).data
+
+    def get_lesson_count(self, obj):
+        annotated = getattr(obj, "lesson_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.lessons.count()
+
+    def get_completed_lessons(self, obj):
+        student = self._student()
+        if student is None:
+            return None
+        annotated = getattr(obj, "completed_lessons_count", None)
+        if annotated is not None:
+            return annotated
+        return obj.lesson_progress_for(student)["completed_lessons"]
+
+    def get_progress_percentage(self, obj):
+        student = self._student()
+        if student is None:
+            return None
+        annotated = getattr(obj, "published_lesson_count", None)
+        total = (
+            annotated
+            if annotated is not None
+            else obj.lessons.filter(is_published=True).count()
+        )
+        if not total:
+            return 0
+        completed = self.get_completed_lessons(obj) or 0
+        return round(completed * 100 / total, 2)
 
     def get_file_url(self, obj):
         return reverse("course-file", kwargs={"pk": obj.pk})
@@ -453,27 +673,8 @@ class CourseSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        if self.instance is None:
-            if not attrs.get("file") and not attrs.get("video_url"):
-                raise serializers.ValidationError(
-                    {
-                        "file": (
-                            "A file or a video URL is required to create a "
-                            "course."
-                        )
-                    }
-                )
-        else:
-            has_file = attrs.get("file", self.instance.file)
-            has_url = attrs.get("video_url", self.instance.video_url)
-            if not has_file and not has_url:
-                raise serializers.ValidationError(
-                    {
-                        "file": (
-                            "A file or a video URL is required for a course."
-                        )
-                    }
-                )
+        # The file and video URL are optional: a course can be assembled from
+        # lessons instead of a single material file.
         return attrs
 
     def _delete_stored_file(self, field_file):

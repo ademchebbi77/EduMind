@@ -30,14 +30,12 @@ import { EmptyState } from '../../components/ui/EmptyState'
 import { Input, Select, Textarea } from '../../components/ui/Field'
 import { PageLoader } from '../../components/ui/Skeleton'
 import { AccessDenied } from '../../components/courses/AccessDenied'
-import { FileDropzone } from '../../components/courses/FileDropzone'
-import { FilePreview } from '../../components/courses/FilePreview'
+import LessonsEditor from '../../components/courses/LessonsEditor'
 import { TagInput } from '../../components/courses/TagInput'
 import { ThumbnailUpload } from '../../components/courses/ThumbnailUpload'
 
 const FALLBACK_THUMBNAIL_EXTENSIONS = ['jpeg', 'jpg', 'png', 'webp']
 const FALLBACK_THUMBNAIL_MAX_BYTES = 2 * 1024 * 1024
-const VIDEO_URL_HOSTS = ['youtube.com', 'youtu.be', 'vimeo.com']
 
 function validateSelectedFile(file, config) {
   if (!config) return 'Upload rules are not available yet.'
@@ -83,29 +81,6 @@ function validateThumbnailFile(file, config) {
   return null
 }
 
-function validateVideoUrl(value) {
-  const trimmed = value.trim()
-  if (!trimmed) return null
-
-  let parsed
-  try {
-    parsed = new URL(trimmed)
-  } catch {
-    return 'Enter a valid YouTube or Vimeo URL.'
-  }
-
-  if (!['http:', 'https:'].includes(parsed.protocol)) {
-    return 'Enter a valid YouTube or Vimeo URL.'
-  }
-
-  const host = parsed.hostname.toLowerCase().replace(/^www\./, '')
-  const supported = VIDEO_URL_HOSTS.some(
-    (domain) => host === domain || host.endsWith(`.${domain}`),
-  )
-
-  return supported ? null : 'Only YouTube and Vimeo links are supported.'
-}
-
 function fieldErrors(fields) {
   return {
     title: firstFieldError(fields, 'title'),
@@ -114,8 +89,6 @@ function fieldErrors(fields) {
     tags: firstFieldError(fields, 'tags'),
     difficulty: firstFieldError(fields, 'difficulty'),
     thumbnail: firstFieldError(fields, 'thumbnail'),
-    file: firstFieldError(fields, 'file'),
-    video_url: firstFieldError(fields, 'video_url'),
     max_students: firstFieldError(fields, 'max_students'),
   }
 }
@@ -126,7 +99,6 @@ const EMPTY_VALUES = {
   category: '',
   tags: [],
   difficulty: '',
-  videoUrl: '',
   maxStudents: '',
 }
 
@@ -142,11 +114,9 @@ export default function CourseFormPage() {
 
   const [reload, setReload] = useState(0)
   const [fetchResult, setFetchResult] = useState({ key: null, course: null, error: null })
+  const lessonsEditorRef = useRef(null)
 
   const [values, setValues] = useState(EMPTY_VALUES)
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [previewUrl, setPreviewUrl] = useState(null)
-  const previewUrlRef = useRef(null)
 
   const [thumbnailFile, setThumbnailFile] = useState(null)
   const [existingThumbnailUrl, setExistingThumbnailUrl] = useState(null)
@@ -196,7 +166,6 @@ export default function CourseFormPage() {
           category: payload.category ? String(payload.category) : '',
           tags: Array.isArray(payload.tags) ? payload.tags : [],
           difficulty: payload.difficulty || '',
-          videoUrl: payload.video_url || '',
           maxStudents:
             payload.max_students !== null && payload.max_students !== undefined
               ? String(payload.max_students)
@@ -216,13 +185,6 @@ export default function CourseFormPage() {
     return () => controller.abort()
   }, [isEdit, courseId, requestKey])
 
-  useEffect(
-    () => () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-    },
-    [],
-  )
-
   const loadingCourse = isEdit && fetchResult.key !== requestKey
   const course = loadingCourse ? null : fetchResult.course
   const loadError = loadingCourse ? null : fetchResult.error
@@ -232,37 +194,10 @@ export default function CourseFormPage() {
     setErrors((current) => ({ ...current, [name]: undefined }))
   }
 
-  function updatePreview(file) {
-    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current)
-    previewUrlRef.current = file ? URL.createObjectURL(file) : null
-    setPreviewUrl(previewUrlRef.current)
-  }
-
-  function handleFileSelect(file) {
-    const fileError = validateSelectedFile(file, config)
-    if (fileError) {
-      setSelectedFile(null)
-      updatePreview(null)
-      setErrors((current) => ({ ...current, file: fileError }))
-      return
-    }
-    setSelectedFile(file)
-    updatePreview(file)
-    setAnalysisError('')
-    setAnalysisSummary('')
-    setErrors((current) => ({ ...current, file: undefined }))
-  }
-
-  function removeSelectedFile() {
-    setSelectedFile(null)
-    updatePreview(null)
-    setAnalysisError('')
-    setAnalysisSummary('')
-  }
-
   async function handleAutoFill() {
-    if (!selectedFile && !isEdit) {
-      setAnalysisError('Select a course file before using auto-fill.')
+    const lessonFile = lessonsEditorRef.current?.getFirstFile() ?? null
+    if (!lessonFile && !isEdit) {
+      setAnalysisError('Add a lesson file before using auto-fill.')
       return
     }
 
@@ -272,7 +207,7 @@ export default function CourseFormPage() {
 
     try {
       const result = await analyzeCourseContent(
-        selectedFile ? { file: selectedFile } : { courseId },
+        lessonFile ? { file: lessonFile } : { courseId },
       )
 
       setValues((current) => ({
@@ -360,15 +295,15 @@ export default function CourseFormPage() {
       nextErrors.title = 'The title cannot exceed 200 characters.'
     }
 
-    if (!isEdit && !selectedFile && !values.videoUrl.trim()) {
-      nextErrors.file = 'Select a file or provide a video link.'
-    } else if (selectedFile) {
-      const fileError = validateSelectedFile(selectedFile, config)
-      if (fileError) nextErrors.file = fileError
+    const hasLessons = lessonsEditorRef.current?.hasRows() ?? false
+    if (!hasLessons) {
+      nextErrors.lessons = 'Add at least one lesson. Each lesson needs a file or a video link.'
     }
 
-    const videoUrlError = validateVideoUrl(values.videoUrl)
-    if (videoUrlError) nextErrors.video_url = videoUrlError
+    const lessonsValid = lessonsEditorRef.current?.validateRows() ?? true
+    if (!lessonsValid) {
+      nextErrors.lessons = 'Please fix the highlighted lessons before saving.'
+    }
 
     const joinedTags = values.tags.join(',')
     if (values.tags.some((tag) => tag.length > 50)) {
@@ -401,14 +336,12 @@ export default function CourseFormPage() {
     const formData = new FormData()
     formData.append('title', values.title.trim())
     formData.append('description', values.description.trim())
-    formData.append('video_url', values.videoUrl.trim())
     formData.append('tags', values.tags.join(', '))
     if (values.category) formData.append('category', values.category)
     if (values.difficulty) formData.append('difficulty', values.difficulty)
     if (values.maxStudents !== '') {
       formData.append('max_students', String(Number(values.maxStudents)))
     }
-    if (selectedFile) formData.append('file', selectedFile)
     if (thumbnailFile) formData.append('thumbnail', thumbnailFile)
 
     const clearFields = {}
@@ -440,6 +373,12 @@ export default function CourseFormPage() {
 
       if (isEdit && Object.keys(clearFields).length) {
         saved = await updateCourseFields(courseId, clearFields)
+      }
+
+      const lessonsOutcome = await lessonsEditorRef.current?.save(saved.id)
+      if (lessonsOutcome && !lessonsOutcome.ok) {
+        setFormError(lessonsOutcome.message || 'Saving the lessons failed.')
+        return
       }
 
       addToast({
@@ -535,7 +474,6 @@ export default function CourseFormPage() {
   const cancelTarget = isEdit ? `/courses/${courseId}` : '/courses'
   const accept = config.allowed_extensions.map((extension) => `.${extension}`).join(',')
   const formats = config.allowed_extensions.map((extension) => extension.toUpperCase())
-  const videoExtensions = config.video_extensions || ['mp4', 'webm', 'avi']
   const thumbnailExtensions =
     config.thumbnail_extensions?.length
       ? config.thumbnail_extensions
@@ -543,22 +481,6 @@ export default function CourseFormPage() {
   const thumbnailHint = `${thumbnailExtensions
     .map((value) => value.toUpperCase())
     .join(', ')} · max ${config.thumbnail_max_size_mb ?? 2} MB.`
-
-  const selectedExtension = selectedFile ? fileExtension(selectedFile.name) : ''
-  const selectedKind = selectedFile
-    ? videoExtensions.includes(selectedExtension)
-      ? 'video'
-      : selectedExtension === 'pdf'
-        ? 'pdf'
-        : 'audio'
-    : null
-
-  const showExistingFile =
-    isEdit &&
-    course &&
-    !selectedFile &&
-    (course.has_file ??
-      (course.type !== 'video' || !course.video_url))
 
   return (
     <div className="space-y-6">
@@ -580,8 +502,8 @@ export default function CourseFormPage() {
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-600">
           {isEdit
-            ? 'Adjust the course details or replace its material. Students will see the update immediately.'
-            : 'Add a PDF, audio or video resource to the catalogue. The course format is detected automatically.'}
+            ? 'Adjust the course details or manage its sequential lessons. Students will see the update immediately.'
+            : 'Build the course from sequential lessons. Each lesson can hold a PDF, audio or video file, or a YouTube/Vimeo link.'}
         </p>
       </header>
 
@@ -602,7 +524,7 @@ export default function CourseFormPage() {
                 <div>
                   <h2 className="text-xl font-semibold text-ink">Course details</h2>
                   <p className="mt-1 text-sm text-slate-600">
-                    Fill the fields manually, or let local AI draft them from your material.
+                    Fill the fields manually, or let local AI draft them from your first lesson file.
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
@@ -611,22 +533,18 @@ export default function CourseFormPage() {
                     variant="secondary"
                     onClick={handleAutoFill}
                     loading={analyzing}
-                    disabled={saving || (!selectedFile && !isEdit)}
+                    disabled={saving}
                   >
                     {!analyzing ? (
                       <Sparkles className="size-4" aria-hidden="true" />
                     ) : null}
                     {analyzing ? 'Analyzing…' : 'Auto-fill with AI'}
                   </Button>
-                  {!selectedFile && !isEdit ? (
-                    <span className="text-xs text-slate-500">
-                      Select a file to enable auto-fill.
-                    </span>
-                  ) : (
-                    <span className="text-xs text-slate-500">
-                      Runs locally on the first pages or minutes.
-                    </span>
-                  )}
+                  <span className="text-xs text-slate-500">
+                    {isEdit
+                      ? 'Uses the first lesson file, or the course details when none is uploaded.'
+                      : 'Uses the first lesson file you selected.'}
+                  </span>
                 </div>
               </div>
 
@@ -731,58 +649,20 @@ export default function CourseFormPage() {
 
             <Card className="space-y-4">
               <div>
-                <h2 className="text-xl font-semibold text-ink">Course material</h2>
+                <h2 className="text-xl font-semibold text-ink">Lessons</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Add a file, a YouTube or Vimeo link, or both. The course type follows the
-                  uploaded file when one is provided.
+                  Build the course as sequential lessons. Each lesson needs a file, a YouTube or
+                  Vimeo link, or both. Students unlock a lesson by completing the previous one.
                 </p>
               </div>
 
-              {showExistingFile ? (
-                <FilePreview
-                  fileName="Current material"
-                  kind={course.type}
-                  url={course.file_url}
-                  existing
-                  subtitle={`${course.type_display || course.type} file online`}
-                />
-              ) : null}
-
-              {selectedFile ? (
-                <FilePreview
-                  fileName={selectedFile.name}
-                  fileSize={selectedFile.size}
-                  kind={selectedKind}
-                  url={previewUrl}
-                  onRemove={removeSelectedFile}
-                />
-              ) : null}
-
-              <FileDropzone
-                onFileSelect={handleFileSelect}
+              <LessonsEditor
+                ref={lessonsEditorRef}
+                courseId={courseId}
+                disabled={saving}
                 accept={accept}
-                formats={formats}
-                maxSizeMb={config.max_video_upload_size_mb ?? config.max_upload_size_mb}
-                disabled={saving}
-                error={errors.file}
-              />
-
-              {isEdit && selectedFile ? (
-                <p className="text-xs text-slate-500">
-                  This file will replace the current material when you save.
-                </p>
-              ) : null}
-
-              <Input
-                label="Video link"
-                name="video_url"
-                type="url"
-                value={values.videoUrl}
-                onChange={(event) => updateField('videoUrl', event.target.value)}
-                error={errors.video_url}
-                hint="YouTube or Vimeo URL. You can combine it with an uploaded file."
-                placeholder="https://www.youtube.com/watch?v=…"
-                disabled={saving}
+                error={errors.lessons}
+                validateFile={(file) => validateSelectedFile(file, config)}
               />
             </Card>
 
@@ -857,7 +737,7 @@ export default function CourseFormPage() {
               {progress !== null ? (
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between text-xs font-medium text-slate-600">
-                    <span>Uploading file…</span>
+                    <span>Uploading…</span>
                     <span>{progress} %</span>
                   </div>
                   <div

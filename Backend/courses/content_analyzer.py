@@ -1319,7 +1319,17 @@ def analyze_course(course):
             started_at=started_at,
         )
 
-    if not course.file:
+    # Courses are lesson-based now: fall back to the first lesson file when
+    # the legacy course-level material is missing.
+    material = course.file
+    if not material:
+        first_lesson = (
+            course.lessons.exclude(file="").order_by("order").first()
+        )
+        if first_lesson is not None:
+            material = first_lesson.file
+
+    if not material:
         text = " ".join(
             part
             for part in (course.title, course.description, course.tags)
@@ -1330,12 +1340,13 @@ def analyze_course(course):
             title_hint=course.title,
             source="metadata",
             warnings=[
-                "This course has no uploaded file. Suggestions use its existing details."
+                "This course has no uploaded material. Suggestions use its "
+                "existing details."
             ],
             started_at=started_at,
         )
 
-    extension = Path(course.file.name).suffix.lower().lstrip(".")
+    extension = Path(material.name).suffix.lower().lstrip(".")
     if extension not in ANALYZABLE_EXTENSIONS:
         raise ContentAnalysisError(
             "This course file cannot be analyzed.",
@@ -1345,7 +1356,7 @@ def analyze_course(course):
     with tempfile.TemporaryDirectory(prefix="edumind-analysis-") as workdir:
         path = Path(workdir) / f"source.{extension}"
         try:
-            with course.file.storage.open(course.file.name, "rb") as source:
+            with material.storage.open(material.name, "rb") as source:
                 with path.open("wb") as target:
                     shutil.copyfileobj(source, target)
         except (FileNotFoundError, OSError) as error:
@@ -1357,14 +1368,14 @@ def analyze_course(course):
         extracted = _analyze_path(
             path,
             extension,
-            filename=course.file.name,
+            filename=material.name,
             title_hint=course.title,
         )
 
     return _analyze_text(
         extracted.text,
         title_hint=extracted.title_hint,
-        filename=course.file.name,
+        filename=material.name,
         source=extracted.source,
         warnings=extracted.warnings,
         started_at=started_at,

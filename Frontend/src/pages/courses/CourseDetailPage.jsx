@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
   CalendarDays,
-  Download,
   FileQuestion,
   Pencil,
   RotateCcw,
@@ -17,51 +16,25 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
 import { canEditCourse } from '../../lib/roles'
-import { formatDate, formatDuration } from '../../lib/format'
-import { useCourseProgress } from '../../hooks/useCourseProgress'
+import { formatDate } from '../../lib/format'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
-import { buttonClasses } from '../../components/ui/buttonStyles'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageLoader } from '../../components/ui/Skeleton'
 import { CategoryBadge } from '../../components/courses/CategoryBadge'
-import { CourseMedia } from '../../components/courses/CourseMedia'
 import { DeleteCourseModal } from '../../components/courses/DeleteCourseModal'
 import { EnrollmentButton } from '../../components/courses/EnrollmentButton'
+import { LessonList } from '../../components/courses/LessonList'
 import { ProgressBar } from '../../components/courses/ProgressBar'
 import { TranscriptCard } from '../../components/courses/TranscriptCard'
 
-const TYPE_VARIANTS = { audio: 'sage', video: 'clay', pdf: 'brand' }
-
-function progressSummary(course, progress) {
-  if (!progress) return 'Loading your progress…'
-  if (progress.completed) {
-    return progress.completed_at
-      ? `Completed on ${formatDate(progress.completed_at)}`
-      : 'Course completed'
-  }
-
-  if (course.type === 'pdf') {
-    if (!progress.total_pages) {
-      return 'Open the document to start tracking your reading.'
-    }
-    return `${progress.pages_viewed} of ${progress.total_pages} pages viewed`
-  }
-
-  if (progress.video_duration_seconds) {
-    const verb = course.type === 'audio' ? 'listened' : 'watched'
-    return `${formatDuration(progress.video_watched_seconds)} of ${formatDuration(progress.video_duration_seconds)} ${verb}`
-  }
-
-  if (course.type === 'video' && course.has_file === false) {
-    return 'External video — progress is estimated when the material is opened.'
-  }
-
-  return course.type === 'audio'
-    ? 'Play the audio to start tracking your progress.'
-    : 'Play the video to start tracking your progress.'
+function lessonSummary(progress) {
+  if (progress == null) return 'Loading your progress…'
+  if (progress.total_lessons === 0) return 'No lessons available yet.'
+  if (progress.completed) return 'All lessons completed. Congratulations!'
+  return `${progress.completed_lessons} of ${progress.total_lessons} lessons completed`
 }
 
 function BackLink() {
@@ -110,13 +83,19 @@ export default function CourseDetailPage() {
   const course = loading ? null : result.course
   const error = loading ? null : result.error
 
-  const tracking = useCourseProgress(course, {
-    enabled: Boolean(
-      course && user?.role === 'student' && course.is_enrolled,
-    ),
-  })
-  const progress = tracking.progress
-  const progressError = tracking.error
+  const lessons = Array.isArray(course?.lessons) ? course.lessons : []
+
+  const lessonProgress =
+    course && user?.role === 'student' && course.is_enrolled
+      ? {
+          total_lessons: lessons.length,
+          completed_lessons: course.completed_lessons ?? 0,
+          percentage: course.progress_percentage ?? 0,
+          completed:
+            lessons.length > 0 &&
+            (course.completed_lessons ?? 0) >= lessons.length,
+        }
+      : null
 
   useDocumentTitle(course?.title || 'Course')
 
@@ -185,7 +164,6 @@ export default function CourseDetailPage() {
 
   const canEdit = canEditCourse(user, course)
   const tags = Array.isArray(course.tags) ? course.tags : []
-  const hasFile = course.has_file !== false
   const enrolledCount = course.enrolled_count ?? 0
   const placesLabel = course.max_students ? `${enrolledCount} / ${course.max_students}` : String(enrolledCount)
 
@@ -212,8 +190,9 @@ export default function CourseDetailPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={TYPE_VARIANTS[course.type] || 'brand'}>
-                  {course.type_display || course.type}
+                <Badge variant="brand">Lessons</Badge>
+                <Badge variant="neutral" className="bg-mist text-slate-600">
+                  {lessons.length} {lessons.length === 1 ? 'lesson' : 'lessons'}
                 </Badge>
                 <CategoryBadge name={course.category_name} />
                 {course.is_full && !course.is_enrolled ? (
@@ -268,45 +247,33 @@ export default function CourseDetailPage() {
                 className="justify-start"
               />
 
-              <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
-                {hasFile ? (
-                  <a
-                    href={course.download_url}
-                    download
-                    className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+              {canEdit ? (
+                <div className="flex flex-wrap items-center gap-2 xl:flex-col xl:items-stretch">
+                  <LinkButton to={`/course-enrollments?course=${course.id}`} variant="secondary" size="sm">
+                    <Users className="size-4" aria-hidden="true" />
+                    Manage enrollments
+                  </LinkButton>
+                  <LinkButton to={`/courses/${course.id}/edit`} variant="secondary" size="sm">
+                    <Pencil className="size-4" aria-hidden="true" />
+                    Edit course
+                  </LinkButton>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setConfirmOpen(true)}
+                    className="text-clay hover:bg-clay/10"
                   >
-                    <Download className="size-4" aria-hidden="true" />
-                    Download
-                  </a>
-                ) : null}
-                {canEdit ? (
-                  <>
-                    <LinkButton to={`/course-enrollments?course=${course.id}`} variant="secondary" size="sm">
-                      <Users className="size-4" aria-hidden="true" />
-                      Manage enrollments
-                    </LinkButton>
-                    <LinkButton to={`/courses/${course.id}/edit`} variant="secondary" size="sm">
-                      <Pencil className="size-4" aria-hidden="true" />
-                      Edit
-                    </LinkButton>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setConfirmOpen(true)}
-                      className="text-clay hover:bg-clay/10"
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Delete
-                    </Button>
-                  </>
-                ) : null}
-              </div>
+                    <Trash2 className="size-4" aria-hidden="true" />
+                    Delete
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       </header>
 
-      {user?.role === 'student' && course.is_enrolled ? (
+      {lessonProgress ? (
         <Card aria-labelledby="course-progress-title">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
@@ -317,58 +284,42 @@ export default function CourseDetailPage() {
                 Your progress
               </h2>
               <p className="mt-1 text-sm text-slate-600">
-                {progressSummary(course, progress)}
+                {lessonSummary(lessonProgress)}
               </p>
-              {progressError ? (
-                <p className="mt-1 text-xs text-clay">{progressError.message}</p>
-              ) : null}
             </div>
             <div className="flex items-center gap-3">
-              {progress?.completed ? (
+              {lessonProgress.completed ? (
                 <Badge variant="success" dot>
                   Completed
                 </Badge>
               ) : null}
               <span className="font-display text-2xl font-semibold text-brand-strong">
-                {progress?.progress ?? 0}%
+                {lessonProgress.percentage}%
               </span>
             </div>
           </div>
 
           <ProgressBar
-            value={progress?.progress ?? 0}
+            value={lessonProgress.percentage}
             ariaLabel="Course progress"
             className="mt-4"
           />
-
-          {progress &&
-          !progress.completed &&
-          course.type !== 'pdf' &&
-          progress.last_position_seconds > 0 ? (
-            <p className="mt-3 text-xs text-slate-500">
-              Playback resumes at{' '}
-              {formatDuration(progress.last_position_seconds)}.
-            </p>
-          ) : null}
         </Card>
       ) : null}
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <Card>
           <div className="mb-5 flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-ink">Course material</h2>
+            <h2 className="text-xl font-semibold text-ink">Course lessons</h2>
             <span className="academic-rule" aria-hidden="true" />
           </div>
-          {user?.role === 'student' &&
-          course.is_enrolled &&
-          !progress &&
-          !progressError ? (
-            <p className="text-sm text-slate-500" aria-live="polite">
-              Preparing your course…
-            </p>
-          ) : (
-            <CourseMedia course={course} tracking={tracking} />
-          )}
+          <LessonList
+            course={course}
+            lessons={lessons}
+            isStudent={user?.role === 'student'}
+            isEnrolled={Boolean(course.is_enrolled)}
+            canManage={canEdit}
+          />
         </Card>
 
         <Card as="aside" aria-labelledby="course-info-title" className="bg-gradient-to-b from-white to-mist/50">
@@ -378,7 +329,11 @@ export default function CourseDetailPage() {
           <dl className="mt-4 divide-y divide-line text-sm">
             <div className="flex items-center justify-between gap-4 py-3">
               <dt className="text-slate-500">Format</dt>
-              <dd className="font-medium text-ink-soft">{course.type_display || course.type}</dd>
+              <dd className="font-medium text-ink-soft">Lessons</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4 py-3">
+              <dt className="text-slate-500">Lessons</dt>
+              <dd className="font-medium text-ink-soft">{lessons.length}</dd>
             </div>
             <div className="flex items-center justify-between gap-4 py-3">
               <dt className="text-slate-500">Category</dt>
@@ -424,7 +379,7 @@ export default function CourseDetailPage() {
         </Card>
       </div>
 
-      {course.type === 'video' && hasFile && (canEdit || course.is_enrolled) ? (
+      {course.type === 'video' && course.has_file && (canEdit || course.is_enrolled) ? (
         <TranscriptCard
           course={course}
           canGenerate={canEdit || course.is_enrolled}
