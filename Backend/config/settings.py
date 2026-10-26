@@ -257,6 +257,9 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 LOGIN_THROTTLE_ATTEMPTS = env_int("LOGIN_THROTTLE_ATTEMPTS", 5)
 LOGIN_THROTTLE_WINDOW_SECONDS = env_int("LOGIN_THROTTLE_WINDOW_SECONDS", 60)
 
+# Prometheus metrics. The /metrics/ endpoint stays disabled (404) while empty.
+METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

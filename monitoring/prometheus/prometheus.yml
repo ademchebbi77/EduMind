@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: edumind-backend
+    metrics_path: /metrics/
+    authorization:
+      type: Bearer
+      credentials: "edumind-dev-metrics-token"
+    static_configs:
+      - targets:
+          - host.docker.internal:8000
+        labels:
+          service: edumind-backend
+
+  - job_name: edumind-postgres
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
+        labels:
+          service: edumind-database

@@ -87,6 +87,8 @@ EduMind/
 │   │   │   ├── auth/      # connexion, inscription
 │   │   │   └── courses/   # catalogue, détail, formulaire
 │   └── package.json
+├── monitoring/            # Prometheus + Grafana (datasource et tableau de bord)
+├── docker-compose.monitoring.yml
 ├── .env.example
 └── README.md
 ```
@@ -129,7 +131,7 @@ démarrer si `SECRET_KEY` est absent.
 | --- | --- | --- |
 | `SECRET_KEY` | chaîne aléatoire longue | Clé cryptographique Django (obligatoire) |
 | `DEBUG` | `True` | Mode développement ; `False` par défaut dans le code |
-| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | Hôtes autorisés |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1,host.docker.internal` | Hôtes autorisés |
 | `CSRF_TRUSTED_ORIGINS` | `http://localhost:5173` | Origines autorisées pour le CSRF |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origines autorisées pour l'API |
 | `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `edumind` / `edumind` / mot de passe local | Identifiants PostgreSQL |
@@ -139,6 +141,8 @@ démarrer si `SECRET_KEY` est absent.
 | `COOKIE_SECURE` | `False` | Cookies `Secure` (obligatoire derrière HTTPS) |
 | `LOGIN_THROTTLE_ATTEMPTS` | `5` | Échecs autorisés par fenêtre |
 | `LOGIN_THROTTLE_WINDOW_SECONDS` | `60` | Durée de la fenêtre de limitation |
+| `METRICS_TOKEN` | `edumind-dev-metrics-token` | Jeton Bearer de `/metrics/` ; vide = endpoint désactivé |
+| `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` | `admin` / `edumind` | Identifiants Grafana (premier démarrage) |
 
 La base utilise l'instance PostgreSQL 18 locale sur le port **5432**. Renseignez
 `DB_PASSWORD` avec le mot de passe du rôle `edumind` créé ci-dessous.
@@ -235,6 +239,60 @@ npm run preview -- --port 4173
 
 Le serveur de prévisualisation reprend le proxy `/api` et sert le bundle sur
 `http://localhost:4173`.
+
+### 6. Monitoring (optionnel) : Prometheus + Grafana
+
+L'API expose `GET /metrics/` au format Prometheus : nombre d'enseignants, nombre
+d'étudiants et nombre de cours. L'endpoint est **désactivé (404)** tant que
+`METRICS_TOKEN` est vide ; sinon, il exige `Authorization: Bearer <jeton>` (401
+sinon). Il n'est pas sous `/api/` et n'est jamais accessible sans le jeton.
+
+1. Vérifiez ces variables dans le `.env` de la racine :
+
+   ```bash
+   ALLOWED_HOSTS=localhost,127.0.0.1,host.docker.internal
+   METRICS_TOKEN=edumind-dev-metrics-token
+   GRAFANA_ADMIN_USER=admin
+   GRAFANA_ADMIN_PASSWORD=edumind
+   ```
+
+2. Démarrez Django en écoutant sur toutes les interfaces, sinon le conteneur
+   Prometheus ne peut pas joindre le serveur :
+
+   ```bash
+   cd Backend
+   PYTHONUTF8=1 python manage.py runserver 0.0.0.0:8000
+   ```
+
+3. Avec Docker Desktop démarré, lancez la pile depuis la racine :
+
+   ```bash
+   docker compose -f docker-compose.monitoring.yml up -d
+   ```
+
+4. Ouvrez :
+
+   - **Grafana** : `http://localhost:3000` — tableau de bord **EduMind overview**
+     (dossier *EduMind*), avec les tuiles **Teachers**, **Students** et **Courses** ;
+   - **Prometheus** : `http://localhost:9090` — cible `edumind-backend` et état des
+     scrapes dans *Status → Targets*.
+
+Vérification manuelle de l'endpoint :
+
+```bash
+curl -H "Authorization: Bearer edumind-dev-metrics-token" http://127.0.0.1:8000/metrics/
+```
+
+Docker Compose transmet le `METRICS_TOKEN` du `.env` à Prometheus : les deux
+valeurs restent donc synchronisées. Les ports 3000 et 9090 sont publiés sur
+`127.0.0.1` uniquement. Les données sont conservées dans les volumes
+`edumind-monitoring_*` ; `docker compose -f docker-compose.monitoring.yml down -v`
+les supprime et réinitialise Grafana (le mot de passe admin n'est appliqué qu'à la
+création du volume). Pour arrêter sans perte : `docker compose -f
+docker-compose.monitoring.yml down`.
+
+Le jeton et le mot de passe proposés conviennent au développement local ; changez-les
+avant tout partage de la machine.
 
 ---
 
@@ -373,6 +431,7 @@ session Django : les requêtes mutantes exigent le cookie CSRF et l'en-tête
 | `PATCH` | `/api/auth/users/{id}/` | Administrateur | Nom, email, rôle et statut d'un compte |
 | `DELETE` | `/api/auth/users/{id}/` | Administrateur | Suppression définitive du compte, de ses cours et fichiers |
 | `GET` | `/api/config/` | Public | Limites de téléversement et extensions autorisées |
+| `GET` | `/metrics/` | Jeton Bearer (`METRICS_TOKEN`) | Métriques Prometheus : effectifs et cours |
 | `GET` | `/api/courses/` | Authentifié | Liste paginée, filtrable et triable |
 | `POST` | `/api/courses/` | Enseignant / admin | Création d'un cours |
 | `GET` | `/api/courses/{id}/` | Authentifié | Détail d'un cours |

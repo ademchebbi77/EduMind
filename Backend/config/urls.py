@@ -2,10 +2,12 @@ from django.contrib import admin
 from django.urls import include, path, re_path
 
 from assessments.views import ExerciseViewSet, QuizViewSet
+from config.metrics import metrics_view
 from config.views import ApiConfigView, api_not_found
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("metrics/", metrics_view, name="metrics"),
     path("api/auth/", include("accounts.urls")),
     path(
         "api/courses/<int:course_id>/quizzes/",
