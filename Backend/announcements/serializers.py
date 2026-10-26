@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .categorization import categorize
+from .extraction import MAX_TEXT_LENGTH
 from .models import Announcement, AnnouncementEnrollment
 from .urgency import compute_urgency
 
@@ -100,6 +101,21 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
         return obj.enrollments.filter(student=request.user).exists()
+
+
+class AnnouncementExtractionSerializer(serializers.Serializer):
+    """Texte descriptif à analyser localement (aucune donnée n'est enregistrée)."""
+
+    text = serializers.CharField(
+        min_length=15,
+        max_length=MAX_TEXT_LENGTH,
+        error_messages={
+            "required": "Saisissez le texte à analyser.",
+            "blank": "Saisissez le texte à analyser.",
+            "min_length": "Le texte est trop court pour être analysé (15 caractères minimum).",
+            "max_length": f"Le texte ne doit pas dépasser {MAX_TEXT_LENGTH} caractères.",
+        },
+    )
 
 
 class AnnouncementEnrollmentSerializer(serializers.ModelSerializer):

@@ -209,6 +209,11 @@ Les analyses sont ensuite visibles dans l'interface :
 - **Annonces** : champ de catégorie dans le formulaire (Automatique par défaut,
   ou Formation, Évaluation, Administratif, Événement, Rappel, Autre), badge et
   filtre dédiés ; détail avec catégorie et confiance (ou mention « Manuelle »).
+- **Nouvelle annonce / modification** (enseignants et administrateurs) : carte
+  repliable « Remplir automatiquement à partir d'un texte ». On colle une description
+  libre en français, l'analyse propose chaque champ avec sa confiance et l'extrait qui
+  l'a motivé, on coche les champs à appliquer, et une confirmation est demandée avant
+  de remplacer une valeur déjà saisie.
 - **Sessions** (enseignants et administrateurs) : prévision de remplissage des
   prochaines sessions, avec fourchette et niveau de confiance.
 - **Nouvelle session** : carte « Créneaux suggérés » avec application en un clic de
@@ -664,6 +669,32 @@ VOICE_QA_WHISPER_MODEL=base                # tiny (rapide) · base · small (plu
 | `POST` | `/api/voice-questions/{id}/retry/` | Relance l'étape en échec |
 | `GET` | `/api/voice-questions/{id}/audio/` | Écoute de l'enregistrement (propriétaire uniquement) |
 | `DELETE` | `/api/voice-questions/{id}/` | Supprime la question et l'audio |
+
+## Extraction locale des champs d'une annonce
+
+`POST /api/announcements/extract/` avec `{"text": "..."}` (15 à 5000 caractères)
+renvoie, pour chaque champ du formulaire d'annonce, `value`, `label`, `confidence`
+(0 à 100), `detected` et `source` (extrait du texte qui justifie la valeur). Réservé
+aux enseignants et administrateurs (mêmes droits que la publication, CSRF exigé).
+Rien n'est enregistré : la réponse est une proposition que l'utilisateur valide.
+
+Module `Backend/announcements/extraction.py`, déterministe et 100 % local (aucune API
+externe, aucun appel réseau, aucune nouvelle dépendance, aucune migration) :
+
+| Champ | Méthode |
+| --- | --- |
+| Titre / contenu | ligne « Titre : » ou « Objet : », sinon première ligne courte, sinon première phrase ; le contenu est le texte sans la ligne de titre |
+| Audience | lexique (« réservé aux étudiants », « destiné aux enseignants », « ouvert à tous »…) |
+| Catégorie | réutilise `categorization.categorize()` (lexique pondéré existant) |
+| Date | « 12 novembre 2026 », « 1er déc. », « 12/11 », « 2026-11-12 », « demain », « lundi prochain »… ; une date précédée de « avant le » ou « date limite » est traitée comme une échéance |
+| Heure | « 14h30 », « 9 h », « 18:45 », « à midi » ; les durées (« pendant 3h ») sont ignorées |
+| Lien | URL validée ; les liens Meet, Zoom, Teams, Webex et Jitsi sont prioritaires |
+| Places | « 30 places », « limité à 12 », « capacité : 40 », « vingt places », « places illimitées » |
+| Session liée | similarité **TF-IDF** (scikit-learn, déjà utilisé par les recommandations) entre le texte et le titre + la description des sessions planifiées ou en cours, avec bonus si le titre est cité ou si la date correspond |
+
+Les chiffres contenus dans les liens sont masqués avant l'analyse des dates, heures
+et places. Lorsqu'une session est appliquée, la date, l'heure et le lien encore vides
+sont complétés depuis la session, comme lors d'une sélection manuelle.
 
 ## Résumés et ressources IA
 
