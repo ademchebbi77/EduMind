@@ -30,6 +30,10 @@ import QuizTakePage from './pages/assessments/QuizTakePage'
 import VoiceQuestionsPage from './pages/voice/VoiceQuestionsPage'
 import JoinLivePage from './pages/live/JoinLivePage'
 import LiveGamePage from './pages/live/LiveGamePage'
+import ResourceFormPage from './pages/summaries/ResourceFormPage'
+import SummariesPage from './pages/summaries/SummariesPage'
+import SummaryDetailPage from './pages/summaries/SummaryDetailPage'
+import SummaryFormPage from './pages/summaries/SummaryFormPage'
 import SessionsPage from './pages/sessions/SessionsPage'
 import SessionFormPage from './pages/sessions/SessionFormPage'
 import SessionDetailPage from './pages/sessions/SessionDetailPage'
@@ -188,6 +192,14 @@ export default function App() {
                     </RequireRole>
                   }
                 />
+
+                {/* Résumés & ressources IA */}
+                <Route path="/summaries" element={<SummariesPage />} />
+                <Route path="/summaries/new" element={<SummaryFormPage />} />
+                <Route path="/summaries/:summaryId" element={<SummaryDetailPage />} />
+                <Route path="/summaries/:summaryId/edit" element={<SummaryFormPage />} />
+                <Route path="/resources/new" element={<ResourceFormPage />} />
+                <Route path="/resources/:resourceId/edit" element={<ResourceFormPage />} />
 
                 {/* Calendrier */}
                 <Route path="/calendar" element={<CalendarPage />} />

@@ -274,7 +274,7 @@ GEMINI_FALLBACK_MODEL=gemini-3.1-flash-lite
 
 Chacun crée **sa propre clé Gemini** : ne jamais partager une clé ni la committer
 (`.env` est ignoré par Git). Sans clé Gemini, tout fonctionne sauf les réponses des
-questions vocales.
+questions vocales et les fonctions IA des résumés.
 
 ### 3. Lancer l'application (2 terminaux)
 
@@ -605,6 +605,39 @@ VOICE_QA_WHISPER_MODEL=base                # tiny (rapide) · base · small (plu
 | `POST` | `/api/voice-questions/{id}/retry/` | Relance l'étape en échec |
 | `GET` | `/api/voice-questions/{id}/audio/` | Écoute de l'enregistrement (propriétaire uniquement) |
 | `DELETE` | `/api/voice-questions/{id}/` | Supprime la question et l'audio |
+
+## Résumés et ressources IA
+
+Page **Summaries & resources** (barre latérale, tous les rôles), application Django `summaries`.
+
+- **CRUD manuel** : résumés (titre, texte, notions clés) et ressources pédagogiques (lien web
+  ou fichier PDF/audio/vidéo). Les contenus d'un enseignant ou d'un admin sont partagés avec
+  tous ; ceux d'un étudiant sont des **notes privées**. Modification : l'auteur, l'enseignant
+  propriétaire du cours ou un admin.
+- **Génération automatique** (`GeminiService`) : Gemini lit le texte complet du cours (PDF ou
+  transcription) et renvoie un JSON structuré (titre, synthèse en sections, 5 à 10 notions
+  clés) enregistré dans PostgreSQL. Si un modèle est saturé, le suivant est essayé.
+- **Illustration en 2 étapes** : Gemini rédige un prompt visuel à partir du résumé, puis
+  `ImageGeneratorService` dessine l'image (Pollinations.ai, gratuit et sans clé ; ou un
+  modèle d'image Gemini avec `SUMMARIES_IMAGE_PROVIDER=gemini` et une clé facturée). L'image
+  est vérifiée avec Pillow, ré-encodée en JPEG et liée au résumé.
+- **Assistant du cours (micro-RAG)** : chat sur la page du résumé ; Gemini répond avec le
+  texte complet du cours et le résumé comme contexte, plus les derniers échanges.
+  Chaque utilisateur ne voit que sa conversation.
+- **Synthèse vocale** : lecteur Play/Pause/Stop avec vitesse, via la Web Speech API du
+  navigateur (gratuit, rien n'est envoyé à un serveur), voix choisie selon la langue.
+- **Limitation** : 60 appels IA par utilisateur et par heure (`SUMMARIES_AI_REQUESTS_PER_HOUR`).
+
+| Méthode | Chemin | Description |
+| --- | --- | --- |
+| `GET/POST` | `/api/summaries/` | Liste (`?course=`, `?search=`) / création manuelle |
+| `GET/PATCH/PUT/DELETE` | `/api/summaries/{id}/` | Détail, modification, suppression |
+| `POST` | `/api/summaries/generate/` | Résumé + notions clés générés par Gemini (`course`) |
+| `GET/POST/DELETE` | `/api/summaries/{id}/illustration/` | Voir, générer ou supprimer l'illustration |
+| `GET/POST/DELETE` | `/api/summaries/{id}/chat/` | Historique, question à l'assistant, effacer |
+| `GET/POST` | `/api/resources/` | Liste / ajout (`kind` = `link` ou `file`) |
+| `GET/PATCH/PUT/DELETE` | `/api/resources/{id}/` | Détail, modification, suppression |
+| `GET` | `/api/resources/{id}/file/` | Fichier de la ressource |
 
 ---
 

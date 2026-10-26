@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "courses",
     "assessments",
     "voice_qa",
+    "summaries",
     "sessions",
     "announcements",
 ]
@@ -235,6 +236,20 @@ VOICE_QA_REQUEST_TIMEOUT_SECONDS = env_int("VOICE_QA_REQUEST_TIMEOUT_SECONDS", 6
 VOICE_QA_CONTEXT_CHARS = env_int("VOICE_QA_CONTEXT_CHARS", 12000)
 VOICE_QA_MAX_ACTIVE = env_int("VOICE_QA_MAX_ACTIVE", 2)
 VOICE_QA_STALE_MINUTES = env_int("VOICE_QA_STALE_MINUTES", 10)
+
+# Summaries and AI resources: Gemini (text) + an image generator (illustrations).
+# Gemini models tried in order when one is busy.
+SUMMARIES_GEMINI_MODELS = env_list(
+    "SUMMARIES_GEMINI_MODELS", f"{GEMINI_MODEL},{GEMINI_FALLBACK_MODEL},gemini-3.5-flash-lite"
+)
+SUMMARIES_RETRY_SECONDS = env_int("SUMMARIES_RETRY_SECONDS", 2)
+SUMMARIES_MAX_COURSE_CHARS = env_int("SUMMARIES_MAX_COURSE_CHARS", 60000)
+# "pollinations" = free image service, no key; "gemini" = Gemini image model (billed key).
+SUMMARIES_IMAGE_PROVIDER = os.getenv("SUMMARIES_IMAGE_PROVIDER", "pollinations")
+SUMMARIES_GEMINI_IMAGE_MODEL = os.getenv("SUMMARIES_GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+SUMMARIES_IMAGE_TIMEOUT_SECONDS = env_int("SUMMARIES_IMAGE_TIMEOUT_SECONDS", 90)
+# AI requests (generate, illustrate, chat) allowed per user and per hour.
+SUMMARIES_AI_REQUESTS_PER_HOUR = env_int("SUMMARIES_AI_REQUESTS_PER_HOUR", 60)
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
