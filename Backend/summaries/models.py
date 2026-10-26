@@ -22,6 +22,8 @@ class Summary(models.Model):
     content = models.TextField()
     # Key notions of the course: [{"term": "...", "definition": "..."}]
     key_concepts = models.JSONField(default=list, blank=True)
+    # AI-generated tags for automatic categorization: ["DevOps", "Docker", "Intermediate"]
+    tags = models.JSONField(default=list, blank=True)
     language = models.CharField(max_length=5, default="en")
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.MANUAL)
     ai_model = models.CharField(max_length=80, blank=True)

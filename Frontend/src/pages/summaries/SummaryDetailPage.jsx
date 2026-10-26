@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { AlertTriangle, ImageIcon, Lightbulb, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
+import { AlertTriangle, Download, ImageIcon, Lightbulb, Lock, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { deleteIllustration, deleteSummary, fetchSummary, generateIllustration } from '../../api/summaries'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
+import { exportSummaryToPDF } from '../../lib/pdfExport'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -17,7 +18,7 @@ import { CourseChat } from '../../components/summaries/CourseChat'
 import { SummaryContent } from '../../components/summaries/SummaryContent'
 
 /** Explanatory picture: Gemini writes the prompt, then the image service draws it. */
-function Illustration({ summary, onChange }) {
+function Illustration({ summary, onChange, canGenerateIllustration = false }) {
   const { addToast } = useToast()
   const [busy, setBusy] = useState(false)
 
@@ -33,7 +34,7 @@ function Illustration({ summary, onChange }) {
     }
   }
 
-  if (!summary.illustration_url && !summary.can_edit) return null
+  if (!summary.illustration_url && !summary.can_edit && !canGenerateIllustration) return null
 
   return (
     <Card className="space-y-4">
@@ -42,13 +43,13 @@ function Illustration({ summary, onChange }) {
           <ImageIcon className="size-5 text-brand" aria-hidden="true" />
           Illustration
         </h2>
-        {summary.can_edit ? (
+        {(summary.can_edit || canGenerateIllustration) ? (
           <div className="flex gap-2">
             <Button variant="accent" size="sm" loading={busy} onClick={() => run(generateIllustration, 'Illustration created.')}>
               <Sparkles className="size-4" aria-hidden="true" />
               {busy ? 'Drawing… (up to a minute)' : summary.illustration_url ? 'New illustration' : 'Generate an illustration'}
             </Button>
-            {summary.illustration_url ? (
+            {summary.illustration_url && summary.can_edit ? (
               <Button variant="ghost" size="sm" disabled={busy} onClick={() => run(deleteIllustration)} aria-label="Remove the illustration">
                 <Trash2 className="size-4" aria-hidden="true" />
               </Button>
@@ -61,7 +62,7 @@ function Illustration({ summary, onChange }) {
         <figure className="space-y-2">
           <img
             src={summary.illustration_url}
-            alt={`Illustration of the summary “${summary.title}”`}
+            alt={`Illustration of the summary "${summary.title}"`}
             className="w-full rounded-xl border border-line bg-mist object-cover"
           />
           {summary.illustration_prompt ? (
@@ -87,6 +88,7 @@ export default function SummaryDetailPage() {
   const [error, setError] = useState(null)
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useDocumentTitle(summary?.title || 'Summary')
 
@@ -104,11 +106,24 @@ export default function SummaryDetailPage() {
     setDeleting(true)
     try {
       await deleteSummary(summary.id)
-      addToast({ type: 'success', message: `“${summary.title}” has been deleted.` })
+      addToast({ type: 'success', message: `"${summary.title}" has been deleted.` })
       navigate('/summaries')
     } catch (deleteError) {
       addToast({ type: 'error', message: normalizeApiError(deleteError, 'Deletion failed.').message })
       setDeleting(false)
+    }
+  }
+
+  async function handleExportPDF() {
+    setExporting(true)
+    try {
+      await exportSummaryToPDF(summary)
+      addToast({ type: 'success', message: 'PDF downloaded successfully!' })
+    } catch (exportError) {
+      console.error('PDF export error:', exportError)
+      addToast({ type: 'error', message: 'Failed to generate PDF. Please try again.' })
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -149,19 +164,40 @@ export default function SummaryDetailPage() {
             )}
             <span>by {summary.author_name}</span>
           </div>
+          {summary.tags && summary.tags.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {summary.tags.map((tag, index) => (
+                <Badge key={index} variant="neutral">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
-        {summary.can_edit ? (
-          <div className="flex gap-2">
-            <LinkButton to={`/summaries/${summary.id}/edit`} variant="secondary">
-              <Pencil className="size-4" aria-hidden="true" />
-              Edit
-            </LinkButton>
-            <Button variant="ghost" onClick={() => setConfirming(true)}>
-              <Trash2 className="size-4" aria-hidden="true" />
-              Delete
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex flex-wrap gap-2">
+          <Button 
+            variant="accent" 
+            onClick={handleExportPDF} 
+            loading={exporting}
+            disabled={exporting}
+            aria-label="Télécharger le résumé au format PDF"
+          >
+            <Download className="size-4" aria-hidden="true" />
+            {exporting ? 'Generating PDF...' : 'Download PDF'}
+          </Button>
+          {summary.can_edit ? (
+            <>
+              <LinkButton to={`/summaries/${summary.id}/edit`} variant="secondary">
+                <Pencil className="size-4" aria-hidden="true" />
+                Edit
+              </LinkButton>
+              <Button variant="ghost" onClick={() => setConfirming(true)}>
+                <Trash2 className="size-4" aria-hidden="true" />
+                Delete
+              </Button>
+            </>
+          ) : null}
+        </div>
       </header>
 
       <AudioPlayer text={summary.content} language={summary.language} />
@@ -191,7 +227,7 @@ export default function SummaryDetailPage() {
         </div>
 
         <div className="space-y-6">
-          <Illustration summary={summary} onChange={setSummary} />
+          <Illustration summary={summary} onChange={setSummary} canGenerateIllustration={true} />
           <CourseChat summaryId={summary.id} />
         </div>
       </div>
@@ -199,7 +235,7 @@ export default function SummaryDetailPage() {
       <ConfirmDeleteModal
         open={confirming}
         title="Delete this summary?"
-        description={`“${summary.title}”, its illustration and its conversations will be permanently deleted.`}
+        description={`"${summary.title}", its illustration and its conversations will be permanently deleted.`}
         deleting={deleting}
         onClose={() => setConfirming(false)}
         onConfirm={remove}

@@ -8,6 +8,7 @@ import {
   fetchSummaries,
   generateSummary,
 } from '../../api/summaries'
+import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { cx } from '../../lib/cx'
 import { firstFieldError, isCanceled, normalizeApiError } from '../../lib/api'
@@ -51,7 +52,7 @@ function SourceBadges({ item }) {
 
 function SummaryCard({ item, onDelete }) {
   return (
-    <Card as="article" className="flex flex-col gap-3">
+    <Card as="article" className="flex h-full flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">{item.course_title}</p>
         <SourceBadges item={item} />
@@ -62,19 +63,33 @@ function SummaryCard({ item, onDelete }) {
         </Link>
       </h2>
       <p className="line-clamp-3 text-sm text-slate-600">{item.content.replace(/^## |^- /gm, '')}</p>
+      {item.tags && item.tags.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {item.tags.slice(0, 4).map((tag, index) => (
+            <Badge key={index} variant="neutral" className="text-xs">
+              {tag}
+            </Badge>
+          ))}
+          {item.tags.length > 4 ? (
+            <Badge variant="neutral" className="text-xs">
+              +{item.tags.length - 4}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
       <p className="text-xs text-slate-500">
         {item.key_concepts.length} key concept{item.key_concepts.length === 1 ? '' : 's'} · by {item.author_name}
       </p>
-      <div className="mt-auto flex flex-wrap gap-2 pt-2">
-        <LinkButton to={`/summaries/${item.id}`} size="sm">
+      <div className="mt-auto flex items-center gap-2 pt-2">
+        <LinkButton to={`/summaries/${item.id}`} size="sm" className="flex-shrink-0">
           Open
         </LinkButton>
         {item.can_edit ? (
           <>
-            <LinkButton to={`/summaries/${item.id}/edit`} size="sm" variant="secondary" aria-label={`Edit ${item.title}`}>
+            <LinkButton to={`/summaries/${item.id}/edit`} size="sm" variant="secondary" aria-label={`Edit ${item.title}`} className="flex-shrink-0">
               <Pencil className="size-4" aria-hidden="true" />
             </LinkButton>
-            <Button size="sm" variant="ghost" onClick={() => onDelete(item)} aria-label={`Delete ${item.title}`}>
+            <Button size="sm" variant="ghost" onClick={() => onDelete(item)} aria-label={`Delete ${item.title}`} className="flex-shrink-0">
               <Trash2 className="size-4" aria-hidden="true" />
             </Button>
           </>
@@ -88,38 +103,45 @@ function ResourceCard({ item, onDelete }) {
   const href = item.kind === 'link' ? item.url : item.file_url
   const Icon = item.kind === 'link' ? Link2 : FileText
   return (
-    <Card as="article" className="flex flex-col gap-3">
+    <Card as="article" className="flex h-full flex-col gap-3">
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-600">{item.course_title}</p>
         <SourceBadges item={item} />
       </div>
       <h2 className="flex items-center gap-2 text-lg font-semibold text-ink">
         <Icon className="size-4 shrink-0 text-brand" aria-hidden="true" />
-        {item.title}
+        <Link to={`/resources/${item.id}`} className="hover:text-brand-strong">
+          {item.title}
+        </Link>
       </h2>
       {item.description ? <p className="line-clamp-3 text-sm text-slate-600">{item.description}</p> : null}
       <p className="text-xs text-slate-500">
         {item.kind === 'link' ? 'Web link' : item.file_name} · by {item.author_name}
       </p>
-      <div className="mt-auto flex flex-wrap gap-2 pt-2">
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex h-9 items-center gap-2 rounded-xl bg-ink px-3 text-sm font-semibold text-paper hover:bg-ink-soft"
-        >
-          <ExternalLink className="size-4" aria-hidden="true" />
-          Open
-        </a>
+      <div className="mt-auto grid grid-cols-[1fr_auto] gap-2 pt-2">
+        <div className="flex items-center gap-2">
+          <LinkButton to={`/resources/${item.id}`} size="sm" className="flex-shrink-0">
+            View details
+          </LinkButton>
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-9 items-center gap-2 rounded-xl bg-ink px-3 text-sm font-semibold text-paper hover:bg-ink-soft flex-shrink-0 whitespace-nowrap"
+          >
+            <ExternalLink className="size-4" aria-hidden="true" />
+            Open
+          </a>
+        </div>
         {item.can_edit ? (
-          <>
-            <LinkButton to={`/resources/${item.id}/edit`} size="sm" variant="secondary" aria-label={`Edit ${item.title}`}>
+          <div className="flex items-center gap-2">
+            <LinkButton to={`/resources/${item.id}/edit`} size="sm" variant="secondary" aria-label={`Edit ${item.title}`} className="flex-shrink-0">
               <Pencil className="size-4" aria-hidden="true" />
             </LinkButton>
-            <Button size="sm" variant="ghost" onClick={() => onDelete(item)} aria-label={`Delete ${item.title}`}>
+            <Button size="sm" variant="ghost" onClick={() => onDelete(item)} aria-label={`Delete ${item.title}`} className="flex-shrink-0">
               <Trash2 className="size-4" aria-hidden="true" />
             </Button>
-          </>
+          </div>
         ) : null}
       </div>
     </Card>
@@ -178,11 +200,15 @@ function GenerateModal({ open, courses, onClose }) {
 
 export default function SummariesPage() {
   useDocumentTitle('Summaries & resources')
+  const { user } = useAuth()
   const { addToast } = useToast()
   const { courses } = useCourseOptions()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'resources' ? 'resources' : 'summaries'
   const config = TABS[tab]
+
+  // Only teachers and admins can generate AI summaries and create resources
+  const canCreate = user && (user.role === 'teacher' || user.role === 'admin')
 
   const [search, setSearch] = useState('')
   const [course, setCourse] = useState(searchParams.get('course') || '')
@@ -247,18 +273,22 @@ export default function SummariesPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="accent" onClick={() => setGenerating(true)}>
-            <Sparkles className="size-4" aria-hidden="true" />
-            Generate with AI
-          </Button>
-          <LinkButton to="/summaries/new">
-            <Plus className="size-4" aria-hidden="true" />
-            New summary
-          </LinkButton>
-          <LinkButton to="/resources/new" variant="secondary">
-            <Plus className="size-4" aria-hidden="true" />
-            New resource
-          </LinkButton>
+          {canCreate && (
+            <>
+              <Button variant="accent" onClick={() => setGenerating(true)}>
+                <Sparkles className="size-4" aria-hidden="true" />
+                Generate with AI
+              </Button>
+              <LinkButton to="/summaries/new">
+                <Plus className="size-4" aria-hidden="true" />
+                New summary
+              </LinkButton>
+              <LinkButton to="/resources/new" variant="secondary">
+                <Plus className="size-4" aria-hidden="true" />
+                New resource
+              </LinkButton>
+            </>
+          )}
         </div>
       </header>
 
@@ -322,15 +352,13 @@ export default function SummariesPage() {
           />
         ) : null}
 
-        {loading && !data.results.length ? (
+        {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden="true">
             {Array.from({ length: 3 }, (_, index) => (
               <CardSkeleton key={index} />
             ))}
           </div>
-        ) : null}
-
-        {!loading && !error && !data.results.length ? (
+        ) : !error && !data.results.length ? (
           <EmptyState
             icon={config.icon}
             title={`No ${config.plural} yet`}
@@ -340,10 +368,8 @@ export default function SummariesPage() {
                 : 'Share a useful web link or a file for one of the courses.'
             }
           />
-        ) : null}
-
-        {data.results.length ? (
-          <div className={cx('grid gap-4 sm:grid-cols-2 xl:grid-cols-3', loading && 'opacity-60')} aria-busy={loading}>
+        ) : data.results.length ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {data.results.map((item) => (
               <ItemCard key={item.id} item={item} onDelete={setToDelete} />
             ))}

@@ -99,8 +99,12 @@ SUMMARY_SCHEMA = {
                 "required": ["term", "definition"],
             },
         },
+        "tags": {
+            "type": "ARRAY",
+            "items": {"type": "STRING"},
+        },
     },
-    "required": ["title", "content", "key_concepts"],
+    "required": ["title", "content", "key_concepts", "tags"],
 }
 
 SUMMARY_PROMPT = """You summarise university courses for students.
@@ -108,6 +112,7 @@ Write a structured summary of the course below, in the language of the course.
 - "title": a short title for the summary.
 - "content": 250 to 450 words. Start each section with a line "## Section title" and use lines starting with "- " for lists. No other Markdown (no bold, tables or code).
 - "key_concepts": the 5 to 10 most important notions of the course, each with a one or two sentence definition taken from the course.
+- "tags": 3 to 8 relevant tags for automatic categorization. Include: main topics, technologies, difficulty level (Beginner/Intermediate/Advanced), course type. Examples: ["DevOps", "Docker", "CI/CD", "Intermediate"], ["Machine Learning", "Python", "Neural Networks", "Advanced"], ["Web Development", "HTML", "CSS", "Beginner"].
 Only use information from the course.
 
 Course title: {title}
@@ -222,10 +227,16 @@ class GeminiService:
             for item in data.get("key_concepts") or []
             if isinstance(item, dict) and item.get("term") and item.get("definition")
         ][:12]
+        tags = [
+            str(tag).strip()[:50]
+            for tag in data.get("tags") or []
+            if isinstance(tag, str) and tag.strip()
+        ][:10]
         return {
             "title": str(data.get("title") or f"Summary of {course.title}").strip()[:200],
             "content": content,
             "key_concepts": concepts,
+            "tags": tags,
             "language": text_language(content),
             "ai_model": model,
         }

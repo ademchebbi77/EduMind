@@ -30,6 +30,7 @@ import QuizTakePage from './pages/assessments/QuizTakePage'
 import VoiceQuestionsPage from './pages/voice/VoiceQuestionsPage'
 import JoinLivePage from './pages/live/JoinLivePage'
 import LiveGamePage from './pages/live/LiveGamePage'
+import ResourceDetailPage from './pages/summaries/ResourceDetailPage'
 import ResourceFormPage from './pages/summaries/ResourceFormPage'
 import SummariesPage from './pages/summaries/SummariesPage'
 import SummaryDetailPage from './pages/summaries/SummaryDetailPage'
@@ -199,6 +200,7 @@ export default function App() {
                 <Route path="/summaries/:summaryId" element={<SummaryDetailPage />} />
                 <Route path="/summaries/:summaryId/edit" element={<SummaryFormPage />} />
                 <Route path="/resources/new" element={<ResourceFormPage />} />
+                <Route path="/resources/:resourceId" element={<ResourceDetailPage />} />
                 <Route path="/resources/:resourceId/edit" element={<ResourceFormPage />} />
 
                 {/* Calendrier */}
