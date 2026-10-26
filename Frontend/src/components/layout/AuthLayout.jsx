@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { BookOpenCheck, ShieldCheck, Sparkles } from 'lucide-react'
 import { AcademicMotif } from '../ui/AcademicMotif'
 import { Logo } from '../ui/Logo'
+import { AccessibilityButton } from '../accessibility/AccessibilityButton'
 
 const HIGHLIGHTS = [
   {
@@ -84,6 +85,9 @@ export function AuthLayout({ title, subtitle, children, footer }) {
             aria-hidden="true"
             className="pointer-events-none absolute right-0 top-0 size-56 rounded-full bg-brand/[0.06] blur-3xl"
           />
+          <div className="absolute right-4 top-4 z-10 sm:right-6 sm:top-6">
+            <AccessibilityButton />
+          </div>
           <div className="relative mx-auto w-full max-w-md">
             <div className="mb-8 lg:hidden">
               <Logo showTagline to="/login" />

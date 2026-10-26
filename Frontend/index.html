@@ -10,6 +10,20 @@
     <meta name="theme-color" content="#14213d" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>EduMind AI — Learn differently</title>
+    <script>
+      // Apply saved accessibility settings before the first paint (no flash of
+      // small text or low contrast). Kept in sync with src/lib/accessibility.js.
+      try {
+        var saved = JSON.parse(localStorage.getItem('edumind:accessibility') || 'null')
+        if (saved) {
+          var root = document.documentElement
+          if (['large', 'x-large'].indexOf(saved.textSize) !== -1) root.dataset.textSize = saved.textSize
+          if (saved.highContrast === true) root.dataset.contrast = 'high'
+        }
+      } catch (error) {
+        // Storage unavailable: defaults apply.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,6 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { AccessibilityProvider } from './context/AccessibilityContext'
 import { AuthProvider } from './context/AuthContext'
 import { ToastProvider } from './context/ToastContext'
+import { AccessibilityPanel } from './components/accessibility/AccessibilityPanel'
 import { AppLayout } from './components/layout/AppLayout'
 import { GuestOnly, RequireAuth, RequireRole } from './components/routing/RouteGuards'
 import DashboardPage from './pages/DashboardPage'
@@ -41,8 +43,10 @@ const STUDENT_ROLES = ['student']
 
 export default function App() {
   return (
+    <AccessibilityProvider>
     <AuthProvider>
       <ToastProvider>
+        <AccessibilityPanel />
         <BrowserRouter>
           <Routes>
             <Route element={<GuestOnly />}>
@@ -240,5 +244,6 @@ export default function App() {
         </BrowserRouter>
       </ToastProvider>
     </AuthProvider>
+    </AccessibilityProvider>
   )
 }

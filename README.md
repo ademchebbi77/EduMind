@@ -573,6 +573,23 @@ Notes :
 - Respect de `prefers-reduced-motion`.
 - Mise en page responsive (catalogue, formulaires, lecteur audio/PDF).
 
+### Panneau « Accessibility »
+
+Un bouton **Accessibility** (barre latérale, en-tête mobile et pages de connexion)
+ouvre un panneau de réglages appliqués immédiatement à **toute l'application** :
+
+| Réglage | Effet |
+| --- | --- |
+| Taille du texte | Normale, grande (112,5 %) ou très grande (125 %) ; toute l'interface s'adapte (unités `rem`) |
+| Contraste élevé | Textes plus foncés, bordures visibles, fonds blancs, focus plus épais |
+
+Les réglages sont mémorisés dans le navigateur (`localStorage`) et appliqués avant
+l'affichage de la page (script dans `index.html`) pour éviter tout clignotement. Le
+panneau est une boîte de dialogue accessible : ouverture au clavier, focus piégé,
+fermeture avec Échap, interrupteur `role="switch"` et boutons radio pour la taille.
+Vérifié avec **axe-core** (aucune violation WCAG A/AA dans chaque mode) ; code dans
+`Frontend/src/components/accessibility/` et `Frontend/src/lib/accessibility.js`.
+
 ---
 
 ## Grille d'acceptation

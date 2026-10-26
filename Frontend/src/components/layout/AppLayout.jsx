@@ -20,6 +20,7 @@ import {
   X,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { AccessibilityButton } from '../accessibility/AccessibilityButton'
 import { useToast } from '../../context/ToastContext'
 import { canManageCourses, isStaff, roleLabel } from '../../lib/roles'
 import { cx } from '../../lib/cx'
@@ -179,6 +180,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
         ) : null}
       </nav>
 
+      <div className="relative mx-3 mb-2">
+        <AccessibilityButton variant="sidebar" />
+      </div>
+
       <div className="relative mx-3 mb-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
         <div className="flex items-center gap-3">
           {user?.avatar_url ? (
@@ -334,16 +339,19 @@ export function AppLayout() {
       <div className="lg:pl-72">
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur lg:hidden">
           <Logo to="/dashboard" />
-          <button
-            type="button"
-            onClick={() => setMenuOpen(true)}
-            aria-expanded={menuOpen}
-            aria-controls="mobile-navigation"
-            aria-label="Open menu"
-            className="rounded-xl border border-line bg-paper p-2.5 text-ink-soft transition hover:border-slate-300 hover:bg-mist"
-          >
-            <Menu className="size-5" aria-hidden="true" />
-          </button>
+          <div className="flex items-center gap-2">
+            <AccessibilityButton />
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-navigation"
+              aria-label="Open menu"
+              className="rounded-xl border border-line bg-paper p-2.5 text-ink-soft transition hover:border-slate-300 hover:bg-mist"
+            >
+              <Menu className="size-5" aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         <div id="mobile-navigation">

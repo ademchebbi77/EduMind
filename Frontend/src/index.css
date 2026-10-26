@@ -108,3 +108,58 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Accessibility settings (set on <html> by the accessibility panel)
+   --------------------------------------------------------------------------- */
+
+/* Text size: every size in the app is in rem, so the whole UI scales. */
+html[data-text-size="large"] {
+  font-size: 112.5%;
+}
+
+html[data-text-size="x-large"] {
+  font-size: 125%;
+}
+
+/* High contrast: darker tokens, visible borders, plain white surfaces. */
+html[data-contrast="high"] {
+  --color-ink: #0a1224;
+  --color-ink-soft: #10182b;
+  --color-brand: #8a3a00;
+  --color-brand-strong: #6b2c00;
+  --color-sage: #1d4a40;
+  --color-clay: #8c2208;
+  --color-mist: #ffffff;
+  --color-line: #6f6555;
+  --color-paper: #ffffff;
+  --color-white: #ffffff;
+  --color-slate-50: #f4ecdf;
+  --color-slate-100: #e8ddcb;
+  --color-slate-200: #b9ad98;
+  --color-slate-300: #8a7f6c;
+  --color-slate-400: #4f4638;
+  --color-slate-500: #3f382c;
+  --color-slate-600: #2f2a21;
+  --color-slate-700: #26221c;
+}
+
+html[data-contrast="high"] body {
+  background-image: none;
+  background-color: #ffffff;
+}
+
+/* Semi-transparent white text on dark areas (sidebar, sign-in panel) becomes solid. */
+html[data-contrast="high"] [class*="text-white/"] {
+  color: #ffffff;
+}
+
+html[data-contrast="high"] ::placeholder {
+  color: #3f382c;
+  opacity: 1;
+}
+
+html[data-contrast="high"] :focus-visible {
+  outline-width: 3px;
+  outline-offset: 3px;
+}
