@@ -367,3 +367,66 @@ class QuizGenerationJob(models.Model):
         if not (self.started_at and self.finished_at):
             return None
         return round((self.finished_at - self.started_at).total_seconds() * 1000)
+
+
+# --- Live quiz game ----------------------------------------------------------------
+#
+# A teacher hosts a game from an existing quiz; students join with a PIN and answer
+# each question at the same time. The screens ask the server for the game state
+# every second (polling), so all the rules live here on the server.
+
+
+class LiveGame(models.Model):
+    class Status(models.TextChoices):
+        LOBBY = "lobby", "Waiting for players"
+        QUESTION = "question", "Question in progress"
+        RESULTS = "results", "Showing the answer"
+        FINISHED = "finished", "Finished"
+
+    SECONDS_PER_QUESTION = 20
+
+    quiz = models.ForeignKey(Quiz, on_delete=models.CASCADE, related_name="live_games")
+    host = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="hosted_live_games"
+    )
+    pin = models.CharField(max_length=6, db_index=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.LOBBY)
+    question_index = models.IntegerField(default=-1)  # -1 = no question shown yet
+    question_started_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.quiz} ({self.pin})"
+
+
+class LivePlayer(models.Model):
+    game = models.ForeignKey(LiveGame, on_delete=models.CASCADE, related_name="players")
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="live_players"
+    )
+    score = models.PositiveIntegerField(default=0)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-score", "joined_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["game", "student"], name="live_player_once_per_game")
+        ]
+
+
+class LiveAnswer(models.Model):
+    player = models.ForeignKey(LivePlayer, on_delete=models.CASCADE, related_name="answers")
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name="+")
+    selected_options = models.JSONField(default=list)  # ids of the chosen options
+    is_correct = models.BooleanField(default=False)
+    points = models.PositiveIntegerField(default=0)
+    answered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            # A student answers each question only once.
+            models.UniqueConstraint(fields=["player", "question"], name="live_answer_once")
+        ]

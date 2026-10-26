@@ -5,6 +5,7 @@ import {
   Calendar,
   ClipboardCheck,
   ClipboardList,
+  Gamepad2,
   GraduationCap,
   LayoutDashboard,
   Loader2,
@@ -109,6 +110,12 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
           <Mic className="size-5" aria-hidden="true" />
           Voice questions
         </NavLink>
+        {user?.role === 'student' && (
+          <NavLink to="/live" end onClick={onNavigate} className={navLinkClasses}>
+            <Gamepad2 className="size-5" aria-hidden="true" />
+            Live quiz
+          </NavLink>
+        )}
         <NavLink to="/sessions" onClick={onNavigate} className={navLinkClasses}>
           <Video className="size-5" aria-hidden="true" />
           Sessions en ligne

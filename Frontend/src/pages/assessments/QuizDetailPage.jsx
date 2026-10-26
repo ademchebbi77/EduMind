@@ -6,6 +6,7 @@ import {
   Circle,
   Clock3,
   FileQuestion,
+  Gamepad2,
   ListChecks,
   Pencil,
   Play,
@@ -15,6 +16,7 @@ import {
   Trophy,
 } from 'lucide-react'
 import { deleteQuiz, fetchQuiz, fetchQuizAttempts } from '../../api/assessments'
+import { createLiveGame } from '../../api/liveGames'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { isCanceled, normalizeApiError } from '../../lib/api'
@@ -150,6 +152,7 @@ export default function QuizDetailPage() {
   const [attempts, setAttempts] = useState({ key: null, data: EMPTY_RESULTS, error: null })
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [hosting, setHosting] = useState(false)
 
   const requestKey = `${quizId}:${reload}`
   const attemptsKey = `${requestKey}:${attemptsPage}`
@@ -242,6 +245,17 @@ export default function QuizDetailPage() {
   if (!quiz) return null
 
   const canManage = canManageAssessment(user, quiz)
+
+  async function hostLiveGame() {
+    setHosting(true)
+    try {
+      const game = await createLiveGame(quiz.id)
+      navigate(`/live/${game.id}`)
+    } catch (hostError) {
+      addToast({ type: 'error', message: normalizeApiError(hostError, 'The live game could not start.').message })
+      setHosting(false)
+    }
+  }
   const isStudent = user?.role === 'student'
   const attemptList = attempts.data.results
   const running = attemptList.find((attempt) => attempt.status === 'in_progress')
@@ -297,6 +311,10 @@ export default function QuizDetailPage() {
             ) : null}
             {canManage ? (
               <>
+                <Button variant="accent" size="sm" onClick={hostLiveGame} loading={hosting}>
+                  <Gamepad2 className="size-4" aria-hidden="true" />
+                  Host live game
+                </Button>
                 <LinkButton to={`/quizzes/${quiz.id}/edit`} variant="secondary" size="sm">
                   <Pencil className="size-4" aria-hidden="true" />
                   Edit
