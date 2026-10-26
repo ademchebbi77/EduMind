@@ -13,6 +13,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ROLE_HINTS = {
   student: 'Access the materials shared by your teachers.',
   teacher: 'Publish and manage your own courses.',
+  admin: 'Manage users and the whole platform. Requires the administrator code.',
 }
 
 function validate(values) {
@@ -41,6 +42,10 @@ function validate(values) {
     errors.password_confirm = 'The two passwords do not match.'
   }
 
+  if (values.role === 'admin' && !values.admin_code) {
+    errors.admin_code = 'Enter the administrator code.'
+  }
+
   return errors
 }
 
@@ -55,6 +60,7 @@ export default function RegisterPage() {
     password: '',
     password_confirm: '',
     role: 'student',
+    admin_code: '',
   })
   const [errors, setErrors] = useState({})
   const [formError, setFormError] = useState('')
@@ -83,6 +89,7 @@ export default function RegisterPage() {
         password: values.password,
         password_confirm: values.password_confirm,
         role: values.role,
+        ...(values.role === 'admin' ? { admin_code: values.admin_code } : {}),
       })
       addToast({
         type: 'success',
@@ -97,6 +104,7 @@ export default function RegisterPage() {
         password: firstFieldError(error.fields, 'password'),
         password_confirm: firstFieldError(error.fields, 'password_confirm'),
         role: firstFieldError(error.fields, 'role'),
+        admin_code: firstFieldError(error.fields, 'admin_code'),
       }
       setErrors(fields)
       const hasFieldError = Object.values(fields).some(Boolean)
@@ -183,7 +191,22 @@ export default function RegisterPage() {
         >
           <option value="student">Student</option>
           <option value="teacher">Teacher</option>
+          <option value="admin">Administrator</option>
         </Select>
+
+        {values.role === 'admin' ? (
+          <Input
+            label="Administrator code"
+            type="password"
+            name="admin_code"
+            autoComplete="off"
+            value={values.admin_code}
+            onChange={(event) => updateField('admin_code', event.target.value)}
+            error={errors.admin_code}
+            hint="Ask the platform owner for this code."
+            required
+          />
+        ) : null}
 
         <Input
           label="Password"

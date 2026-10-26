@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.contrib.auth.password_validation import validate_password
 from django.db import IntegrityError
 from django.urls import reverse
+from django.utils.crypto import constant_time_compare
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed, Throttled
 
@@ -294,12 +295,12 @@ class RegisterSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, trim_whitespace=False)
     password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
     role = serializers.ChoiceField(
-        choices=[User.Role.STUDENT, User.Role.TEACHER],
-        error_messages={
-            "invalid_choice": (
-                "Only the student and teacher roles are allowed at registration."
-            )
-        },
+        choices=[User.Role.STUDENT, User.Role.TEACHER, User.Role.ADMIN],
+        error_messages={"invalid_choice": "That role is not valid."},
+    )
+    # Required for the admin role only: must match settings.ADMIN_REGISTRATION_CODE.
+    admin_code = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, trim_whitespace=False
     )
 
     def validate_email(self, value):
@@ -316,6 +317,17 @@ class RegisterSerializer(serializers.Serializer):
                 {"password_confirm": "The two passwords do not match."}
             )
 
+        if attrs["role"] == User.Role.ADMIN:
+            expected = settings.ADMIN_REGISTRATION_CODE
+            if not expected:
+                raise serializers.ValidationError(
+                    {"role": "Administrator registration is disabled."}
+                )
+            if not constant_time_compare(attrs.get("admin_code", ""), expected):
+                raise serializers.ValidationError(
+                    {"admin_code": "The administrator code is not valid."}
+                )
+
         candidate = User(
             email=attrs["email"],
             first_name=attrs["first_name"],
@@ -330,6 +342,7 @@ class RegisterSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         validated_data.pop("password_confirm")
+        validated_data.pop("admin_code", None)
         password = validated_data.pop("password")
         try:
             return User.objects.create_user(password=password, **validated_data)

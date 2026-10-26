@@ -113,16 +113,54 @@ class AuthApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.json()["role"], "student")
 
-    def test_self_registration_as_admin_is_rejected(self):
+    @override_settings(ADMIN_REGISTRATION_CODE="")
+    def test_admin_registration_is_rejected_when_no_code_is_configured(self):
         response = self.client.post(
             REGISTER_URL,
-            self.build_register_payload(role="admin"),
+            self.build_register_payload(role="admin", admin_code=""),
             format="json",
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("role", response.json()["error"]["fields"])
         self.assertFalse(User.objects.exists())
+
+    @override_settings(ADMIN_REGISTRATION_CODE="the-right-code")
+    def test_admin_registration_requires_the_right_code(self):
+        for code in (None, "", "wrong-code"):
+            with self.subTest(code=code):
+                payload = self.build_register_payload(role="admin")
+                if code is not None:
+                    payload["admin_code"] = code
+                response = self.client.post(REGISTER_URL, payload, format="json")
+
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn("admin_code", response.json()["error"]["fields"])
+        self.assertFalse(User.objects.exists())
+
+    @override_settings(ADMIN_REGISTRATION_CODE="the-right-code")
+    def test_admin_registration_with_the_right_code(self):
+        response = self.client.post(
+            REGISTER_URL,
+            self.build_register_payload(role="admin", admin_code="the-right-code"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["role"], "admin")
+        self.assertNotIn("admin_code", response.json())
+        self.assertEqual(User.objects.get().role, User.Role.ADMIN)
+
+    @override_settings(ADMIN_REGISTRATION_CODE="the-right-code")
+    def test_admin_code_is_ignored_for_other_roles(self):
+        response = self.client.post(
+            REGISTER_URL,
+            self.build_register_payload(role="student", admin_code="anything"),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.json()["role"], "student")
 
     def test_register_rejects_duplicate_email_case_insensitively(self):
         self.create_user(email="alice@example.com")

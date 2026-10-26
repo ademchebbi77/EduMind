@@ -266,6 +266,10 @@ DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 LOGIN_THROTTLE_ATTEMPTS = env_int("LOGIN_THROTTLE_ATTEMPTS", 5)
 LOGIN_THROTTLE_WINDOW_SECONDS = env_int("LOGIN_THROTTLE_WINDOW_SECONDS", 60)
 
+# Secret code asked when someone signs up as an administrator.
+# Empty = nobody can sign up as an administrator.
+ADMIN_REGISTRATION_CODE = os.getenv("ADMIN_REGISTRATION_CODE", "")
+
 # Prometheus metrics. The /metrics/ endpoint stays disabled (404) while empty.
 METRICS_TOKEN = os.getenv("METRICS_TOKEN", "")
 

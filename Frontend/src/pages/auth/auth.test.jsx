@@ -135,12 +135,36 @@ describe('RegisterPage', () => {
     )
   }
 
-  it('only offers student and teacher roles', () => {
+  it('offers the student, teacher and administrator roles', () => {
     renderRegister()
 
     expect(screen.getByRole('option', { name: 'Student' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'Teacher' })).toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: /administrator/i })).toBeNull()
+    expect(
+      screen.getByRole('option', { name: 'Administrator' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText(/administrator code/i)).toBeNull()
+  })
+
+  it('asks for the administrator code before registering an admin', async () => {
+    const user = userEvent.setup()
+    registerMock.mockResolvedValue({ first_name: 'Amel' })
+    renderRegister()
+
+    await fillValidForm(user, { email: 'amel@example.com' })
+    await user.selectOptions(screen.getByLabelText(/signing up as/i), 'admin')
+    await user.click(screen.getByRole('button', { name: /create my account/i }))
+
+    expect(screen.getByText('Enter the administrator code.')).toBeInTheDocument()
+    expect(registerMock).not.toHaveBeenCalled()
+
+    await user.type(screen.getByLabelText(/administrator code/i), 'secret-code')
+    await user.click(screen.getByRole('button', { name: /create my account/i }))
+
+    expect(await screen.findByText('Private area')).toBeInTheDocument()
+    expect(registerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'admin', admin_code: 'secret-code' }),
+    )
   })
 
   it('validates required fields and password confirmation', async () => {
