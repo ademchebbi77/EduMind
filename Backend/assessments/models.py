@@ -273,3 +273,97 @@ class ExerciseSubmission(models.Model):
     @property
     def is_graded(self):
         return self.graded_at is not None
+
+
+def generation_source_path(instance, filename):
+    extension = Path(filename).suffix.lower()
+    return f"quiz-generation/{uuid.uuid4().hex}{extension}"
+
+
+class QuizGenerationJob(models.Model):
+    """A background run of the local quiz generator (see assessments.generation)."""
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+
+    class Stage(models.TextChoices):
+        QUEUED = "queued", "Waiting for a worker"
+        EXTRACTING = "extracting", "Reading the document"
+        ANALYSING = "analysing", "Finding key ideas"
+        GENERATING = "generating", "Writing questions"
+        DONE = "done", "Complete"
+        FAILED = "failed", "Failed"
+
+    MIXED = "mixed"
+    DIFFICULTY_CHOICES = [(MIXED, "Mixed"), *Difficulty.choices]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="quiz_generation_jobs",
+    )
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="quiz_generation_jobs",
+    )
+    # Uploaded documents are only kept until the worker has read them.
+    source_file = models.FileField(upload_to=generation_source_path, blank=True)
+    source_name = models.CharField(max_length=255)
+    num_questions = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MinValueValidator(3), MaxValueValidator(30)],
+    )
+    difficulty = models.CharField(max_length=20, choices=DIFFICULTY_CHOICES, default=MIXED)
+    question_types = models.JSONField(default=list)
+
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.QUEUED)
+    stage = models.CharField(max_length=12, choices=Stage.choices, default=Stage.QUEUED)
+    progress = models.PositiveSmallIntegerField(default=0)
+    language = models.CharField(max_length=10, blank=True)
+    engine = models.CharField(max_length=80, blank=True)
+    result = models.JSONField(null=True, blank=True)
+    stats = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    # Filled when the teacher saves a quiz from this job: how many generated
+    # questions were kept, edited or removed (used for the quality metrics).
+    quiz = models.ForeignKey(
+        Quiz,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="generation_jobs",
+    )
+    feedback = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "quiz generation job"
+        verbose_name_plural = "quiz generation jobs"
+        indexes = [models.Index(fields=["requested_by", "status"])]
+
+    def __str__(self):
+        return f"{self.source_name} ({self.status})"
+
+    @property
+    def queue_ms(self):
+        if not self.started_at:
+            return None
+        return round((self.started_at - self.created_at).total_seconds() * 1000)
+
+    @property
+    def processing_ms(self):
+        if not (self.started_at and self.finished_at):
+            return None
+        return round((self.finished_at - self.started_at).total_seconds() * 1000)

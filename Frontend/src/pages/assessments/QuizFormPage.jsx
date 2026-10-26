@@ -1,17 +1,19 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
+  ArrowRight,
   CheckCircle2,
   FileQuestion,
   Lock,
   Plus,
   RotateCcw,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react'
 import { createQuiz, fetchQuiz, updateQuiz } from '../../api/assessments'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
-import { isCanceled, normalizeApiError } from '../../lib/api'
+import { firstFieldError, isCanceled, normalizeApiError } from '../../lib/api'
 import { canManageCourses } from '../../lib/roles'
 import { pluralize } from '../../lib/format'
 import {
@@ -66,8 +68,11 @@ export default function QuizFormPage() {
   const { quizId } = useParams()
   const isEdit = Boolean(quizId)
   const [searchParams] = useSearchParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const { user } = useAuth()
+  // Draft handed over by the quiz generator page (never applied when editing).
+  const [generation] = useState(() => (isEdit ? null : location.state?.generation || null))
   const { addToast } = useToast()
   const { courses, loading: coursesLoading, error: coursesError, retry: retryCourses } =
     useCourseOptions()
@@ -78,13 +83,31 @@ export default function QuizFormPage() {
   const [fetchResult, setFetchResult] = useState({ key: null, quiz: null, error: null })
   const [values, setValues] = useState(() => ({
     ...INITIAL_VALUES,
-    course: searchParams.get('course') || '',
+    ...generation?.values,
+    course: generation?.values.course || searchParams.get('course') || '',
   }))
-  const [questions, setQuestions] = useState(() => (isEdit ? [] : [emptyQuestion()]))
+  const [questions, setQuestions] = useState(() => {
+    if (isEdit) return []
+    return generation?.questions.length ? generation.questions : [emptyQuestion()]
+  })
   const [errors, setErrors] = useState({})
   const [questionErrors, setQuestionErrors] = useState({})
   const [formError, setFormError] = useState('')
   const [saving, setSaving] = useState(false)
+  // Bumped after a failed save so the first error is brought into view, even
+  // when the teacher clicked "Create quiz" at the bottom of a long form.
+  const [errorFocus, setErrorFocus] = useState(0)
+  const pageRef = useRef(null)
+
+  useEffect(() => {
+    if (!errorFocus) return
+    const page = pageRef.current
+    const target =
+      page?.querySelector('[aria-invalid="true"]') || page?.querySelector('[role="alert"]')
+    if (!target) return
+    target.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    target.focus?.({ preventScroll: true })
+  }, [errorFocus])
 
   const requestKey = `${quizId ?? 'new'}:${reload}`
 
@@ -152,12 +175,14 @@ export default function QuizFormPage() {
     setQuestionErrors(validation.questionErrors)
     if (Object.keys(validation.errors).length || Object.keys(validation.questionErrors).length) {
       setFormError('Some fields need your attention before the quiz can be saved.')
+      setErrorFocus((count) => count + 1)
       return
     }
 
     setSaving(true)
     try {
       const payload = buildQuizPayload(values, questions)
+      if (generation) payload.generation_job = generation.jobId
       const saved = isEdit ? await updateQuiz(quizId, payload) : await createQuiz(payload)
       addToast({
         type: 'success',
@@ -172,8 +197,9 @@ export default function QuizFormPage() {
       setFormError(
         Object.keys(mapped.errors).length
           ? 'Some fields need your attention before the quiz can be saved.'
-          : error.message,
+          : firstFieldError(error.fields, 'generation_job') || error.message,
       )
+      setErrorFocus((count) => count + 1)
     } finally {
       setSaving(false)
     }
@@ -256,7 +282,7 @@ export default function QuizFormPage() {
   const totalPoints = questions.reduce((sum, item) => sum + (Number(item.points) || 0), 0)
 
   return (
-    <div className="space-y-6">
+    <div ref={pageRef} className="space-y-6">
       <BackLink to={cancelTarget} label={isEdit ? 'Back to quiz' : 'Back to quizzes'} />
 
       <header className="border-b border-line pb-6">
@@ -272,7 +298,37 @@ export default function QuizFormPage() {
             ? 'Update the quiz settings and questions. Scores already recorded are kept as they were.'
             : 'Attach an auto-graded quiz to one of your courses. Single-choice, multiple-choice and true/false questions are corrected automatically.'}
         </p>
+        {!isEdit && !generation ? (
+          <Link
+            to="/quizzes/generate"
+            className="mt-3 inline-flex items-center gap-1.5 rounded text-sm font-semibold text-brand-strong underline-offset-4 hover:underline"
+          >
+            <Sparkles className="size-4" aria-hidden="true" />
+            Or generate questions from a course document
+            <ArrowRight className="size-4" aria-hidden="true" />
+          </Link>
+        ) : null}
       </header>
+
+      {generation ? (
+        <div className="flex items-start gap-3 rounded-xl border border-brand/25 bg-brand/[0.05] px-4 py-3 text-sm text-ink-soft">
+          <Sparkles className="mt-0.5 size-5 shrink-0 text-brand-strong" aria-hidden="true" />
+          <div>
+            <p className="font-semibold text-ink">
+              {generation.questions.length} {pluralize(generation.questions.length, 'question')}{' '}
+              generated locally from “{generation.sourceName}”.
+            </p>
+            <p className="mt-0.5">
+              Review, edit or remove them. Nothing is saved until you click Create quiz.
+            </p>
+            {!values.course ? (
+              <p className="mt-1.5 font-semibold text-brand-strong">
+                Choose the course this quiz belongs to in “Quiz details” below.
+              </p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
 
       {formError ? (
         <div

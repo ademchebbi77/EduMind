@@ -1,0 +1,39 @@
+Introduction à l'apprentissage automatique
+
+L'apprentissage automatique est une branche de l'intelligence artificielle qui permet aux ordinateurs d'apprendre à partir de données sans être explicitement programmés. Au lieu d'écrire des règles à la main, on fournit des exemples à un algorithme qui construit lui-même un modèle. Ce modèle sert ensuite à faire des prédictions sur de nouvelles données.
+
+Les grandes familles d'apprentissage
+
+L'apprentissage supervisé est une approche dans laquelle chaque exemple d'entraînement est associé à une étiquette connue. Le modèle apprend la relation entre les variables d'entrée et l'étiquette attendue. Les problèmes de classification et de régression relèvent de l'apprentissage supervisé.
+
+La classification consiste à prédire une catégorie, par exemple distinguer un courriel légitime d'un spam. La régression consiste à prédire une valeur numérique continue, comme le prix d'un logement ou la température du lendemain.
+
+L'apprentissage non supervisé est une approche qui travaille sur des données sans étiquette. L'objectif est de découvrir une structure cachée dans les données. Le clustering désigne le regroupement automatique d'exemples similaires en groupes homogènes. L'algorithme des k-moyennes est la méthode de clustering la plus utilisée dans l'industrie.
+
+L'apprentissage par renforcement est une approche où un agent apprend en interagissant avec un environnement. L'agent reçoit une récompense ou une pénalité après chaque action. Il cherche à maximiser la récompense cumulée sur le long terme.
+
+Les algorithmes classiques
+
+Plusieurs algorithmes supervisés sont enseignés dans ce cours, tels que la régression linéaire, les arbres de décision, les forêts aléatoires et les machines à vecteurs de support. La régression linéaire modélise la relation entre les variables par une droite. Les arbres de décision découpent l'espace des données à l'aide de questions successives sur les variables. Les forêts aléatoires combinent de nombreux arbres de décision afin de réduire la variance du modèle.
+
+Les machines à vecteurs de support cherchent la frontière qui sépare les classes avec la plus grande marge possible. Les réseaux de neurones sont des modèles inspirés du fonctionnement du cerveau humain. Les réseaux de neurones profonds sont à l'origine du deep learning, qui domine aujourd'hui la vision par ordinateur et le traitement du langage naturel.
+
+Préparer les données
+
+La qualité des données détermine en grande partie la qualité du modèle. Avant l'entraînement, les données passent par plusieurs étapes de préparation comme le nettoyage, la normalisation et l'encodage des variables catégorielles. Le nettoyage supprime les valeurs aberrantes et traite les valeurs manquantes. La normalisation ramène les variables numériques à une échelle comparable.
+
+Les données sont ensuite divisées en un ensemble d'entraînement et un ensemble de test. L'ensemble d'entraînement sert à ajuster les paramètres du modèle. L'ensemble de test permet d'estimer la performance du modèle sur des données jamais vues. En pratique, on réserve souvent 20 % des données pour l'ensemble de test.
+
+Évaluer un modèle
+
+Le surapprentissage désigne la situation où un modèle mémorise les données d'entraînement au lieu d'apprendre des règles générales. Un modèle en surapprentissage obtient d'excellents résultats sur l'ensemble d'entraînement mais de mauvais résultats sur l'ensemble de test. La validation croisée est une technique qui découpe les données en plusieurs blocs pour évaluer le modèle de façon plus fiable.
+
+Pour un problème de classification, on utilise des métriques telles que l'exactitude, la précision, le rappel et le score F1. La précision mesure la proportion de prédictions positives qui sont correctes. Le rappel mesure la proportion d'exemples positifs que le modèle retrouve. Le score F1 est la moyenne harmonique de la précision et du rappel. La matrice de confusion résume les prédictions correctes et incorrectes pour chaque classe.
+
+Pour un problème de régression, l'erreur quadratique moyenne est la métrique la plus courante. Elle pénalise fortement les grandes erreurs de prédiction.
+
+Optimisation
+
+La descente de gradient est un algorithme d'optimisation qui ajuste progressivement les paramètres du modèle pour minimiser la fonction de coût. Le taux d'apprentissage contrôle la taille de chaque pas de la descente de gradient. Un taux d'apprentissage trop élevé empêche la convergence, alors qu'un taux d'apprentissage trop faible ralentit fortement l'entraînement.
+
+Le perceptron, proposé par Frank Rosenblatt en 1957, est considéré comme l'ancêtre des réseaux de neurones modernes. Aujourd'hui, des bibliothèques comme scikit-learn, TensorFlow et PyTorch facilitent la mise en œuvre de ces algorithmes en Python.

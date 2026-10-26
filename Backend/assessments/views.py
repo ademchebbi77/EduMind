@@ -1,5 +1,7 @@
+import logging
 from pathlib import Path
 
+from django.conf import settings
 from django.db.models import (
     Case,
     Count,
@@ -17,12 +19,14 @@ from django.db.models.functions import Coalesce
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
-from rest_framework import serializers, status, viewsets
+from kombu.exceptions import OperationalError as KombuOperationalError
+from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import APIException, NotFound, PermissionDenied, Throttled
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from accounts.models import User
 from courses.file_serving import build_file_response
@@ -36,8 +40,16 @@ from .models import (
     Question,
     Quiz,
     QuizAttempt,
+    QuizGenerationJob,
 )
-from .permissions import CanManageAssessment, IsStudent, can_manage_course
+from .generation.keywords import available_engine
+from .generation.service import (
+    ACTIVE_STATUSES,
+    compute_metrics,
+    expire_if_stale,
+    humanize_filename,
+)
+from .permissions import CanManageAssessment, IsStudent, IsTeacherOrAdmin, can_manage_course
 from .serializers import (
     ExerciseDetailSerializer,
     ExerciseSerializer,
@@ -46,12 +58,17 @@ from .serializers import (
     PublicQuizSerializer,
     QuizAttemptResultSerializer,
     QuizAttemptSerializer,
+    QuizGenerationJobSerializer,
+    QuizGenerationRequestSerializer,
     QuizListSerializer,
     QuizSerializer,
     QuizSubmissionSerializer,
     SubmissionContentSerializer,
+    course_text_status,
 )
 from .services import attempts_used, start_attempt, submit_attempt
+
+logger = logging.getLogger(__name__)
 
 DIFFICULTY_ORDER = Case(
     *(When(difficulty=value, then=Value(rank)) for value, rank in DIFFICULTY_RANK.items()),
@@ -352,3 +369,145 @@ class ExerciseViewSet(AssessmentQuerysetMixin, viewsets.ModelViewSet):
         submission.graded_at = timezone.now()
         submission.save()
         return Response(ExerciseSubmissionSerializer(submission).data)
+
+
+# --- Local quiz generator --------------------------------------------------------
+
+
+class GeneratorUnavailable(APIException):
+    status_code = 503
+    default_code = "generator_unavailable"
+    default_detail = (
+        "The background worker is unavailable. Start Redis and the Celery worker, "
+        "then try again."
+    )
+
+
+def _generation_jobs(user):
+    jobs = QuizGenerationJob.objects.select_related("course")
+    return jobs if user.role == User.Role.ADMIN else jobs.filter(requested_by=user)
+
+
+def _enqueue(job):
+    """Hand the job to Celery; fail it immediately if the broker is unreachable."""
+    from .tasks import generate_quiz_task
+
+    try:
+        generate_quiz_task.apply_async(args=[str(job.pk)], retry=False)
+    except (KombuOperationalError, OSError) as error:
+        logger.warning("Quiz generation broker unavailable: %s", error)
+        job.status = QuizGenerationJob.Status.FAILED
+        job.stage = QuizGenerationJob.Stage.FAILED
+        job.error_message = GeneratorUnavailable.default_detail
+        job.finished_at = timezone.now()
+        job.save(update_fields=["status", "stage", "error_message", "finished_at"])
+        if job.source_file:
+            job.source_file.delete(save=True)
+        raise GeneratorUnavailable() from error
+
+
+def _course_from_upload(request, upload):
+    """Create a course from an uploaded PDF with the course module's own serializer."""
+    from courses.serializers import CourseSerializer
+
+    upload.seek(0)
+    serializer = CourseSerializer(
+        data={"title": humanize_filename(upload.name)[:200], "file": upload},
+        context={"request": request},
+    )
+    if not serializer.is_valid():
+        messages = [str(message) for errors in serializer.errors.values() for message in errors]
+        raise serializers.ValidationError({"file": messages or ["This PDF cannot become a course."]})
+    return serializer.save(owner=request.user)
+
+
+class QuizGenerationViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Start local quiz generation jobs and follow their progress."""
+
+    permission_classes = [IsAuthenticated, IsTeacherOrAdmin]
+    serializer_class = QuizGenerationJobSerializer
+
+    def get_queryset(self):
+        return _generation_jobs(self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        payload = QuizGenerationRequestSerializer(data=request.data, context={"request": request})
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+
+        active = QuizGenerationJob.objects.filter(
+            requested_by=request.user, status__in=ACTIVE_STATUSES
+        )
+        still_active = [job for job in active if expire_if_stale(job).status in ACTIVE_STATUSES]
+        if len(still_active) >= settings.QUIZ_GENERATION_MAX_ACTIVE_JOBS:
+            raise Throttled(detail="Wait for your current quiz generations to finish.")
+
+        course, upload = data.get("course"), data.get("file")
+        created_course = None
+        if data["create_course"]:
+            # The PDF becomes a regular course; the job then reads that course.
+            created_course = course = _course_from_upload(request, upload)
+            upload = None
+        job = QuizGenerationJob(
+            requested_by=request.user,
+            course=course,
+            source_name=(Path(upload.name).name if upload else course.title)[:255],
+            num_questions=data["num_questions"],
+            difficulty=data["difficulty"],
+            question_types=data["question_types"],
+        )
+        if upload is not None:
+            job.source_file.save(upload.name, upload, save=False)
+        job.save()
+        try:
+            _enqueue(job)
+        except GeneratorUnavailable:
+            if created_course is not None:
+                created_course.delete()  # nothing half-done when the worker is down
+            raise
+        job.refresh_from_db()  # already finished when tasks run eagerly
+        return Response(self.get_serializer(job).data, status=status.HTTP_202_ACCEPTED)
+
+    def retrieve(self, request, *args, **kwargs):
+        job = expire_if_stale(self.get_object())
+        return Response(self.get_serializer(job).data)
+
+
+class QuizGenerationSourcesView(APIView):
+    """Courses the current user may generate a quiz from."""
+
+    permission_classes = [IsAuthenticated, IsTeacherOrAdmin]
+
+    def get(self, request):
+        courses = Course.objects.select_related("transcript").order_by("title")
+        if request.user.role != User.Role.ADMIN:
+            courses = courses.filter(owner=request.user)
+        results = []
+        for course in courses:
+            available, reason = course_text_status(course)
+            results.append(
+                {
+                    "id": course.pk,
+                    "title": course.title,
+                    "type": course.type,
+                    "available": available,
+                    "reason": reason,
+                }
+            )
+        return Response({"results": results})
+
+
+class QuizGenerationMetricsView(APIView):
+    """Quality and performance metrics of the generator (own jobs; all for admins)."""
+
+    permission_classes = [IsAuthenticated, IsTeacherOrAdmin]
+
+    def get(self, request):
+        metrics = compute_metrics(_generation_jobs(request.user))
+        metrics["engine"] = {language: available_engine(language) for language in ("fr", "en")}
+        return Response(metrics)

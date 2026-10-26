@@ -401,6 +401,67 @@ Le champ `fields` est optionnel. Principaux codes : `validation_error`,
 
 ---
 
+## Générateur de quiz local (IA)
+
+Un enseignant génère un quiz à partir d'un cours PDF, de la transcription d'un cours
+audio/vidéo, ou d'un document téléversé (PDF, DOCX, TXT, MD). Les questions s'ouvrent
+dans l'éditeur de quiz : rien n'est enregistré avant validation par l'enseignant.
+
+- **100 % local** : aucune API d'IA externe, aucune clé, aucun accès Internet à
+  l'exécution. Le code se trouve dans `Backend/assessments/generation/`.
+- **Pipeline** : extraction du texte (`pypdf`, DOCX lu en XML) → détection de la langue
+  (français/anglais) → découpage en phrases → extraction de termes clés (TF-IDF par
+  document, filtres de groupes nominaux) → questions à choix unique (définitions, textes
+  à trous), à choix multiple (énumérations) et vrai/faux. Chaque bonne réponse provient
+  d'une phrase du document, affichée comme explication ; les distracteurs sont d'autres
+  termes du document choisis par similarité de contexte.
+- **spaCy optionnel** : si `spacy` et un modèle (`fr_core_news_sm`, `en_core_web_sm`…)
+  sont déjà installés, ils sont utilisés ; sinon le moteur pur Python prend le relais.
+  Aucun modèle n'est téléchargé automatiquement.
+- **Asynchrone** : la génération s'exécute dans un worker **Celery** avec **Redis**
+  (`POST /api/quiz-generator/jobs/` répond 202, l'interface suit la progression).
+
+### Lancer Redis et le worker
+
+```bash
+docker run -d --name edumind-redis -p 6379:6379 redis:7-alpine   # une seule fois
+docker start edumind-redis                                       # les fois suivantes
+
+cd Backend
+PYTHONUTF8=1 .venv/Scripts/celery -A config worker --pool=solo --loglevel=info
+```
+
+`--pool=solo` est nécessaire sous Windows. Sans Redis, l'API répond **503** avec un
+message explicite. Pour le développement uniquement, `CELERY_TASK_ALWAYS_EAGER=True`
+dans `.env` exécute les tâches dans le processus web.
+
+### Points d'entrée
+
+| Méthode | Chemin | Description |
+| --- | --- | --- |
+| `GET` | `/api/quiz-generator/sources/` | Cours utilisables et raison si indisponible |
+| `POST` | `/api/quiz-generator/jobs/` | Lance une génération (`course` ou `file`, `num_questions`, `difficulty`, `question_types`) |
+| `GET` | `/api/quiz-generator/jobs/{id}/` | Statut, étape, progression et résultat |
+| `GET` | `/api/quiz-generator/metrics/` | Métriques de qualité et de performance |
+
+Réservé aux enseignants (sur leurs propres cours) et aux administrateurs.
+
+### Métriques
+
+```bash
+cd Backend
+PYTHONUTF8=1 .venv/Scripts/python manage.py evaluate_quiz_generator --runs 3 --output rapport-ia.md
+```
+
+Le rapport mesure le temps de réponse (médiane, p95), le taux de remplissage, le taux
+de questions **valides** (acceptées par la validation de l'API) et le taux de questions
+**ancrées** (bonne réponse présente dans la phrase source, aucun distracteur dedans).
+Il inclut aussi l'usage réel : temps d'attente et de traitement des jobs Celery, et le
+**taux d'acceptation par les enseignants** (questions conservées ou modifiées lors de
+l'enregistrement du quiz).
+
+---
+
 ## Sécurité
 
 - **Sessions et CSRF** : cookies de session `HttpOnly`, `SameSite=Lax` ; jeton CSRF

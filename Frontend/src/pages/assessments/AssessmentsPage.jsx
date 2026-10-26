@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { AlertTriangle, ClipboardList, ListChecks, PenLine, Plus, RotateCcw, SearchX } from 'lucide-react'
+import { AlertTriangle, ClipboardList, ListChecks, PenLine, Plus, RotateCcw, SearchX, Sparkles } from 'lucide-react'
 import { deleteExercise, deleteQuiz, fetchExercises, fetchQuizzes } from '../../api/assessments'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
@@ -190,6 +190,10 @@ export default function AssessmentsPage() {
             <LinkButton to="/quizzes/new">
               <Plus className="size-4" aria-hidden="true" />
               New quiz
+            </LinkButton>
+            <LinkButton to="/quizzes/generate" variant="accent">
+              <Sparkles className="size-4" aria-hidden="true" />
+              Generate with AI
             </LinkButton>
             <LinkButton to="/exercises/new" variant="secondary">
               <Plus className="size-4" aria-hidden="true" />

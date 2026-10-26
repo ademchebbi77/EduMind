@@ -37,6 +37,18 @@ class CanManageAssessment(BasePermission):
         return can_manage_course(request.user, obj.course)
 
 
+class IsTeacherOrAdmin(BasePermission):
+    message = "Only teachers and administrators can use the quiz generator."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(
+            user
+            and user.is_authenticated
+            and user.role in {User.Role.TEACHER, User.Role.ADMIN}
+        )
+
+
 class IsStudent(BasePermission):
     message = "Only students can perform this action."
 

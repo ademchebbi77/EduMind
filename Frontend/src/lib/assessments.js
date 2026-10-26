@@ -344,3 +344,38 @@ export function buildExerciseFormData(values, { file = null, removeAttachment = 
   else if (removeAttachment) formData.append('remove_attachment', 'true')
   return formData
 }
+
+// --- Local quiz generator -------------------------------------------------------
+
+export const GENERATION_STAGES = [
+  { value: 'queued', label: 'Waiting for a worker' },
+  { value: 'extracting', label: 'Reading the document' },
+  { value: 'analysing', label: 'Finding key ideas' },
+  { value: 'generating', label: 'Writing questions' },
+  { value: 'done', label: 'Ready to review' },
+]
+
+export const GENERATION_FILE_EXTENSIONS = ['pdf', 'docx', 'txt', 'md']
+
+export function isGenerationFinished(job) {
+  return job?.status === 'completed' || job?.status === 'failed'
+}
+
+/** Form values and question drafts for the quiz builder from a completed job. */
+export function draftFromGeneration(job) {
+  const result = job.result || {}
+  return {
+    jobId: job.id,
+    sourceName: job.source_name,
+    engine: job.engine,
+    language: job.language,
+    warnings: result.warnings || [],
+    values: {
+      title: (result.title || '').slice(0, 200),
+      description: result.description || '',
+      course: job.course ? String(job.course) : '',
+      difficulty: result.difficulty || 'beginner',
+    },
+    questions: questionsToDrafts(result.questions || []),
+  }
+}

@@ -2,15 +2,19 @@ import logging
 from decimal import Decimal
 from pathlib import Path
 
+import filetype
+from django.conf import settings
 from django.db import transaction
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
-
-from django.urls import reverse
 
 from courses.models import Course
 from courses.validators import validate_course_file
 
+from .generation.extraction import SUPPORTED_EXTENSIONS
+from .generation.generator import QUESTION_TYPES
+from .generation.service import record_feedback
 from .models import (
     AnswerOption,
     Exercise,
@@ -18,6 +22,7 @@ from .models import (
     Question,
     Quiz,
     QuizAttempt,
+    QuizGenerationJob,
 )
 from .permissions import can_manage_course
 
@@ -153,6 +158,14 @@ class QuizSerializer(CourseOwnershipMixin, serializers.ModelSerializer):
     question_count = serializers.SerializerMethodField()
     total_points = serializers.SerializerMethodField()
     questions = QuestionSerializer(many=True)
+    # Optional on create: the generation job this quiz was reviewed from, used
+    # to measure how many generated questions the teacher kept.
+    generation_job = serializers.PrimaryKeyRelatedField(
+        queryset=QuizGenerationJob.objects.all(),
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
 
     course_error = "You can only add quizzes to courses you own."
 
@@ -175,10 +188,21 @@ class QuizSerializer(CourseOwnershipMixin, serializers.ModelSerializer):
             "question_count",
             "total_points",
             "questions",
+            "generation_job",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("id", "created_at", "updated_at")
+
+    def validate_generation_job(self, job):
+        if job is None:
+            return None
+        user = self.context["request"].user
+        if self.instance is not None or job.requested_by_id != user.id:
+            raise serializers.ValidationError("This generation job cannot be linked to the quiz.")
+        if job.status != QuizGenerationJob.Status.COMPLETED or job.quiz_id is not None:
+            raise serializers.ValidationError("This generation job was already used or did not finish.")
+        return job
 
     def get_question_count(self, obj):
         annotated = getattr(obj, "question_count", None)
@@ -284,12 +308,16 @@ class QuizSerializer(CourseOwnershipMixin, serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         questions_data = validated_data.pop("questions")
+        generation_job = validated_data.pop("generation_job", None)
         quiz = Quiz.objects.create(**validated_data)
         self._save_questions(quiz, questions_data)
+        if generation_job is not None:
+            record_feedback(generation_job, quiz)
         return quiz
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        validated_data.pop("generation_job", None)
         questions_data = validated_data.pop("questions", None)
         instance = super().update(instance, validated_data)
         if questions_data is not None:
@@ -635,3 +663,141 @@ class ExerciseDetailSerializer(ExerciseSerializer):
         if submission is None:
             return None
         return ExerciseSubmissionSerializer(submission, context=self.context).data
+
+
+# --- Local quiz generator ----------------------------------------------------------
+
+
+def course_text_status(course):
+    """(available, reason) for using a course as generator source."""
+    if course.type == Course.Type.PDF:
+        return (True, "") if course.file else (False, "This course has no PDF file.")
+    transcript = getattr(course, "transcript", None)
+    if transcript is not None and transcript.status == "completed" and transcript.text.strip():
+        return True, ""
+    return False, "Generate this course's transcript first, or upload a document."
+
+
+def validate_generation_file(upload):
+    name = getattr(upload, "name", "") or ""
+    extension = Path(name).suffix.lower().lstrip(".")
+    formats = ", ".join(extension.upper() for extension in SUPPORTED_EXTENSIONS)
+    if extension not in SUPPORTED_EXTENSIONS:
+        raise serializers.ValidationError(f"Unsupported format. Accepted formats: {formats}.")
+    size = getattr(upload, "size", 0) or 0
+    if size <= 0:
+        raise serializers.ValidationError("The file is empty.")
+    if size > settings.MAX_UPLOAD_SIZE_BYTES:
+        raise serializers.ValidationError(
+            f"The file exceeds the maximum allowed size of {settings.MAX_UPLOAD_SIZE_MB} MB."
+        )
+
+    position = upload.tell()
+    header = upload.read(4096)
+    upload.seek(position)
+    if extension in ("pdf", "docx"):
+        kind = filetype.guess(header)
+        if kind is None or kind.extension != extension:
+            raise serializers.ValidationError("The file content does not match its extension.")
+    elif b"\x00" in header:
+        raise serializers.ValidationError("This does not look like a text file.")
+    return upload
+
+
+class QuizGenerationRequestSerializer(serializers.Serializer):
+    """``course`` alone: read that course. ``file``: read the file, and ``course``
+    is the course the quiz will belong to. ``file`` + ``create_course``: the PDF
+    becomes a new course, which is then read and receives the quiz."""
+
+    create_course = serializers.BooleanField(default=False)
+
+    course = serializers.PrimaryKeyRelatedField(
+        queryset=Course.objects.select_related("transcript"),
+        required=False,
+        allow_null=True,
+    )
+    file = serializers.FileField(required=False, validators=[validate_generation_file])
+    num_questions = serializers.IntegerField(min_value=3, max_value=30, default=10)
+    difficulty = serializers.ChoiceField(
+        choices=[choice for choice, _ in QuizGenerationJob.DIFFICULTY_CHOICES],
+        default=QuizGenerationJob.MIXED,
+    )
+    question_types = serializers.ListField(
+        child=serializers.ChoiceField(choices=QUESTION_TYPES),
+        min_length=1,
+        default=list(QUESTION_TYPES),
+    )
+
+    def validate_course(self, course):
+        if course is None:
+            return None
+        if not can_manage_course(self.context["request"].user, course):
+            raise serializers.ValidationError(
+                "You can only generate quizzes for courses you own."
+            )
+        return course
+
+    def validate_question_types(self, value):
+        return [type_ for type_ in QUESTION_TYPES if type_ in set(value)]
+
+    def validate(self, attrs):
+        if attrs.get("create_course"):
+            upload = attrs.get("file")
+            if upload is None:
+                raise serializers.ValidationError(
+                    {"file": ["Upload the PDF document that will become the course."]}
+                )
+            if Path(upload.name).suffix.lower() != ".pdf":
+                raise serializers.ValidationError(
+                    {"create_course": ["Only a PDF document can become a course."]}
+                )
+            attrs["course"] = None
+            return attrs
+
+        course = attrs.get("course")
+        if course is None:
+            raise serializers.ValidationError(
+                {"course": ["Choose the course this quiz belongs to."]}
+            )
+        if attrs.get("file") is None:
+            # The course itself is the source: it must contain readable text.
+            available, reason = course_text_status(course)
+            if not available:
+                raise serializers.ValidationError({"course": [reason]})
+        return attrs
+
+
+class QuizGenerationJobSerializer(serializers.ModelSerializer):
+    stage_display = serializers.CharField(source="get_stage_display", read_only=True)
+    course_title = serializers.CharField(source="course.title", read_only=True, default=None)
+    queue_ms = serializers.IntegerField(read_only=True)
+    processing_ms = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = QuizGenerationJob
+        fields = (
+            "id",
+            "status",
+            "stage",
+            "stage_display",
+            "progress",
+            "source_name",
+            "course",
+            "course_title",
+            "num_questions",
+            "difficulty",
+            "question_types",
+            "language",
+            "engine",
+            "result",
+            "stats",
+            "error_message",
+            "quiz",
+            "feedback",
+            "created_at",
+            "started_at",
+            "finished_at",
+            "queue_ms",
+            "processing_ms",
+        )
+        read_only_fields = fields

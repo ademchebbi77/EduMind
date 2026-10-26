@@ -21,6 +21,7 @@ import ExerciseDetailPage from './pages/assessments/ExerciseDetailPage'
 import ExerciseFormPage from './pages/assessments/ExerciseFormPage'
 import QuizDetailPage from './pages/assessments/QuizDetailPage'
 import QuizFormPage from './pages/assessments/QuizFormPage'
+import QuizGeneratorPage from './pages/assessments/QuizGeneratorPage'
 import QuizResultPage from './pages/assessments/QuizResultPage'
 import QuizTakePage from './pages/assessments/QuizTakePage'
 import SessionsPage from './pages/sessions/SessionsPage'
@@ -121,6 +122,14 @@ export default function App() {
                   element={
                     <RequireRole roles={COURSE_MANAGER_ROLES}>
                       <QuizFormPage />
+                    </RequireRole>
+                  }
+                />
+                <Route
+                  path="/quizzes/generate"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <QuizGeneratorPage />
                     </RequireRole>
                   }
                 />

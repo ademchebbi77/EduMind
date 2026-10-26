@@ -1,0 +1,41 @@
+Neural Networks Explained
+
+A neural network is a machine learning model made of layers of connected units called neurons. Each neuron computes a weighted sum of its inputs, adds a bias, and passes the result through an activation function. Neural networks learn by adjusting their weights so that their predictions match the expected outputs.
+
+Architecture
+
+A typical network has an input layer, one or more hidden layers, and an output layer. The input layer receives the raw features of an example. The hidden layers transform those features into more abstract representations. The output layer produces the final prediction, such as a class probability or a numeric value.
+
+A deep neural network is a network with many hidden layers. Deep learning refers to the training of deep neural networks on large datasets. Deep learning drives modern progress in computer vision, speech recognition, and natural language processing.
+
+Activation functions
+
+An activation function is a non-linear function applied to the output of each neuron. Without activation functions, a neural network would only be able to represent linear relationships. Common activation functions include the sigmoid, the hyperbolic tangent, ReLU, and softmax.
+
+The sigmoid squashes its input into a value between 0 and 1. ReLU returns zero for negative inputs and the input itself for positive inputs. ReLU is the default activation function in most hidden layers because it is cheap to compute and reduces the vanishing gradient problem. Softmax converts the scores of the output layer into probabilities that sum to 1.
+
+Training
+
+Training a neural network means finding weights that minimise a loss function. The loss function measures how far the predictions are from the expected outputs. Cross-entropy is the usual loss function for classification, while mean squared error is the usual loss function for regression.
+
+Backpropagation is the algorithm that computes the gradient of the loss function with respect to every weight. It applies the chain rule layer by layer, starting from the output layer and moving back towards the input layer. Gradient descent then uses these gradients to update the weights in small steps.
+
+The learning rate controls the size of each update during gradient descent. A learning rate that is too high makes training unstable, while a learning rate that is too low makes training very slow. Popular optimisers such as SGD, Momentum, RMSprop, and Adam adapt the updates in different ways.
+
+An epoch is one complete pass over the training dataset. Training data is usually processed in small groups called mini-batches. The batch size is the number of examples in each mini-batch.
+
+Avoiding overfitting
+
+Overfitting happens when a network memorises the training data instead of learning patterns that generalise. An overfitted network performs well on the training set but poorly on the test set. Regularisation techniques such as dropout, weight decay, and early stopping help to prevent overfitting.
+
+Dropout randomly disables a fraction of neurons during training. Early stopping halts training when the error on a validation set starts to increase. Data augmentation creates new training examples by applying small transformations, like rotations or crops, to existing images.
+
+Specialised architectures
+
+A convolutional neural network is a network designed for grid-like data such as images. Convolutional layers apply small filters that detect local patterns like edges and textures. Pooling layers reduce the size of the feature maps and make the network more robust to small shifts.
+
+A recurrent neural network is a network that processes sequences one element at a time while keeping an internal state. Long short-term memory networks, known as LSTM, solve the vanishing gradient problem of simple recurrent networks. Transformers replaced recurrent networks in most language tasks thanks to the attention mechanism.
+
+History
+
+The perceptron was introduced by Frank Rosenblatt in 1957 as a single artificial neuron. Backpropagation was popularised in 1986 by David Rumelhart, Geoffrey Hinton, and Ronald Williams. In 2012, the AlexNet convolutional network won the ImageNet competition and started the deep learning revolution.

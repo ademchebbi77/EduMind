@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   ShieldAlert,
+  Sparkles,
   Users,
   Video,
   X,
@@ -137,6 +138,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/quizzes/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />
               Add a quiz
+            </NavLink>
+            <NavLink to="/quizzes/generate" onClick={onNavigate} className={navLinkClasses}>
+              <Sparkles className="size-5" aria-hidden="true" />
+              Generate a quiz
             </NavLink>
             <NavLink to="/exercises/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />

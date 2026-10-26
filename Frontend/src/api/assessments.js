@@ -103,6 +103,29 @@ export async function gradeExerciseSubmission(exerciseId, submissionId, payload)
   return data
 }
 
+// --- Local quiz generator ----------------------------------------------------
+
+/** ``formData`` holds either ``course`` or ``file``, plus the generation options. */
+export async function startQuizGeneration(formData, { onUploadProgress } = {}) {
+  const { data } = await api.post('/quiz-generator/jobs/', formData, { onUploadProgress })
+  return data
+}
+
+export async function fetchQuizGeneration(jobId, { signal } = {}) {
+  const { data } = await api.get(`/quiz-generator/jobs/${jobId}/`, { signal })
+  return data
+}
+
+export async function fetchGenerationSources({ signal } = {}) {
+  const { data } = await api.get('/quiz-generator/sources/', { signal })
+  return data.results
+}
+
+export async function fetchGenerationMetrics({ signal } = {}) {
+  const { data } = await api.get('/quiz-generator/metrics/', { signal })
+  return data
+}
+
 // --- Courses ---------------------------------------------------------------
 
 const COURSE_PAGE_SIZE = 50

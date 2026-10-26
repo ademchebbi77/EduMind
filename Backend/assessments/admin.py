@@ -7,6 +7,7 @@ from .models import (
     Question,
     Quiz,
     QuizAttempt,
+    QuizGenerationJob,
 )
 
 
@@ -73,3 +74,11 @@ class ExerciseSubmissionAdmin(admin.ModelAdmin):
     list_display = ("exercise", "student", "score", "graded_at", "updated_at")
     search_fields = ("exercise__title", "student__email")
     readonly_fields = ("submitted_at", "updated_at", "graded_at", "graded_by")
+
+
+@admin.register(QuizGenerationJob)
+class QuizGenerationJobAdmin(admin.ModelAdmin):
+    list_display = ("source_name", "requested_by", "status", "engine", "language", "created_at")
+    list_filter = ("status", "engine", "language")
+    search_fields = ("source_name", "requested_by__email")
+    readonly_fields = [field.name for field in QuizGenerationJob._meta.fields]
