@@ -10,11 +10,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# CPU-only PyTorch for the local Whisper model (avoids ~2 GB of CUDA libraries).
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch
-
 COPY requirements.txt .
-RUN pip install -r requirements.txt gunicorn==23.0.0
+RUN pip install -r requirements.txt
 
 COPY . .
 

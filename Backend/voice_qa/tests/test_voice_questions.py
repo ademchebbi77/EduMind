@@ -471,8 +471,19 @@ class FakeWhisperModel:
         return {"text": self.text, "language": self.language}
 
 
+def pretend_whisper_is_installed(test):
+    """The model is always a fake here, so the optional openai-whisper package
+    (left out of requirements.txt for the Render deployment) is not needed."""
+    patcher = mock.patch.object(local_whisper, "available", return_value=True)
+    patcher.start()
+    test.addCleanup(patcher.stop)
+
+
 @override_settings(VOICE_QA_TRANSCRIPTION_PROVIDER="local", VOICE_QA_WHISPER_MODEL="base")
 class LocalWhisperTests(SimpleTestCase):
+    def setUp(self):
+        pretend_whisper_is_installed(self)
+
     def test_is_the_free_default_and_needs_no_key(self):
         with override_settings(OPENAI_API_KEY=""):
             self.assertTrue(services.transcription_enabled())
@@ -537,6 +548,7 @@ def io_bytes(data):
 class LocalWhisperApiTests(TemporaryMediaMixin, APITestCase):
     def setUp(self):
         super().setUp()
+        pretend_whisper_is_installed(self)
         previous = celery_app.conf.task_always_eager
         celery_app.conf.update(CELERY_TASK_ALWAYS_EAGER=True)
         self.addCleanup(celery_app.conf.update, CELERY_TASK_ALWAYS_EAGER=previous)

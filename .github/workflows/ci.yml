@@ -59,10 +59,7 @@ jobs:
           cache-dependency-path: Backend/requirements.txt
 
       - name: Install dependencies
-        run: |
-          # CPU-only PyTorch for Whisper keeps the install small.
-          pip install --index-url https://download.pytorch.org/whl/cpu torch
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Django checks
         run: |
