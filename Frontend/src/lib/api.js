@@ -5,11 +5,9 @@ export const CSRF_HEADER_NAME = 'X-CSRFToken'
 
 const UNSAFE_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 
-// In production (Render), VITE_API_URL points to the backend service.
+// In production (Render static site), _redirects proxies /api/* to backend.
 // In development, the Vite proxy forwards /api → localhost:8000.
-const BASE_URL = import.meta.env.VITE_API_URL
-  ? `${import.meta.env.VITE_API_URL}/api`
-  : '/api'
+const BASE_URL = '/api'
 
 export const api = axios.create({
   baseURL: BASE_URL,
