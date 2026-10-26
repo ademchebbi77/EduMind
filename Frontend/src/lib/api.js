@@ -5,7 +5,7 @@ export const CSRF_HEADER_NAME = 'X-CSRFToken'
 
 const UNSAFE_METHODS = new Set(['post', 'put', 'patch', 'delete'])
 
-// In production (Render static site), _redirects proxies /api/* to backend.
+// In production (Render static site), render.yaml rewrites /api/* to Django.
 // In development, the Vite proxy forwards /api → localhost:8000.
 const BASE_URL = '/api'
 

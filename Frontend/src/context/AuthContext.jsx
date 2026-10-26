@@ -11,9 +11,28 @@ import { normalizeApiError } from '../lib/api'
 
 const AuthContext = createContext(null)
 
+const STORAGE_KEY = 'edumind_user'
+
+function loadStoredUser() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveUser(user) {
+  if (user) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(user))
+  } else {
+    localStorage.removeItem(STORAGE_KEY)
+  }
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [status, setStatus] = useState('loading')
+  const [user, setUser] = useState(loadStoredUser)
+  const [status, setStatus] = useState(() => loadStoredUser() ? 'authenticated' : 'loading')
 
   useEffect(() => {
     let active = true
@@ -22,12 +41,20 @@ export function AuthProvider({ children }) {
       .then((data) => {
         if (!active) return
         setUser(data)
+        saveUser(data)
         setStatus('authenticated')
       })
       .catch(() => {
         if (!active) return
-        setUser(null)
-        setStatus('guest')
+        // If we have a stored user but session expired, keep them logged in
+        // and clear storage only if no stored user exists
+        const stored = loadStoredUser()
+        if (!stored) {
+          setUser(null)
+          setStatus('guest')
+        } else {
+          setStatus('authenticated')
+        }
       })
 
     return () => {
@@ -39,6 +66,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await loginRequest({ email, password })
       setUser(data)
+      saveUser(data)
       setStatus('authenticated')
       return data
     } catch (error) {
@@ -50,6 +78,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await registerRequest(payload)
       setUser(data)
+      saveUser(data)
       setStatus('authenticated')
       return data
     } catch (error) {
@@ -61,6 +90,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await updateProfileRequest(payload)
       setUser(data)
+      saveUser(data)
       return data
     } catch (error) {
       throw normalizeApiError(error, 'Profile update failed.')
@@ -85,6 +115,7 @@ export function AuthProvider({ children }) {
       }
     } finally {
       setUser(null)
+      saveUser(null)
       setStatus('guest')
     }
   }, [])
