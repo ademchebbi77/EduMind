@@ -51,6 +51,13 @@ TITLE_MIN_WORDS = 2
 TITLE_MAX_WORDS = 14
 DESCRIPTION_MAX_CHARS = 300
 DESCRIPTION_MIN_CHARS = 150
+READING_WORDS_PER_MINUTE = 200
+DIFFICULTY_ORDER = {"beginner": 0, "intermediate": 1, "advanced": 2}
+
+MEDIA_DURATION_PATTERN = re.compile(
+    r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)"
+)
+FILENAME_NUMBER_PREFIX = re.compile(r"^\s*(\d+)")
 
 TOKEN_PATTERN = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’-]*")
 SENTENCE_PATTERN = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9À-ÖØ-Þ])")
@@ -1269,9 +1276,59 @@ def validate_analysis_upload(upload):
         upload.seek(0)
 
 
-def analyze_upload(upload):
+def get_media_duration_seconds(path):
+    """Return the real duration of an audio/video file, or None.
+
+    imageio-ffmpeg only bundles the ffmpeg binary, so the duration is read
+    from ffmpeg's own probe output instead of ffprobe.
+    """
+    command = [
+        imageio_ffmpeg.get_ffmpeg_exe(),
+        "-hide_banner",
+        "-nostdin",
+        "-i",
+        str(path),
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=_setting("CONTENT_ANALYZER_FFMPEG_TIMEOUT_SECONDS", 300),
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        logger.warning("Unable to probe media duration", exc_info=True)
+        return None
+
+    match = MEDIA_DURATION_PATTERN.search(result.stderr or "")
+    if match is None:
+        return None
+
+    hours, minutes, seconds = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def estimate_lesson_duration(file_path, extension, word_count=0):
+    """Estimate a lesson length in minutes.
+
+    PDFs and documents use a reading speed of 200 words per minute; audio and
+    video use the real media duration. Returns None when it cannot be known.
+    """
+    if extension in AUDIO_EXTENSIONS or extension in VIDEO_EXTENSIONS:
+        seconds = get_media_duration_seconds(file_path)
+        if not seconds:
+            return None
+        return max(1, round(seconds / 60))
+
+    if word_count:
+        return max(1, round(word_count / READING_WORDS_PER_MINUTE))
+    return None
+
+
+def _analyze_upload(upload):
     started_at = time.perf_counter()
-    extension = Path(getattr(upload, "name", "")).suffix.lower().lstrip(".")
+    filename = getattr(upload, "name", "") or ""
+    extension = Path(filename).suffix.lower().lstrip(".")
     validate_analysis_upload(upload)
 
     with tempfile.TemporaryDirectory(prefix="edumind-analysis-") as workdir:
@@ -1286,20 +1343,109 @@ def analyze_upload(upload):
                 code="invalid_file",
             ) from error
 
-        extracted = _analyze_path(
-            path,
-            extension,
-            filename=getattr(upload, "name", ""),
+        extracted = _analyze_path(path, extension, filename=filename)
+        duration = estimate_lesson_duration(
+            path, extension, extracted.word_count
         )
 
-    return _analyze_text(
+    result = _analyze_text(
         extracted.text,
         title_hint=extracted.title_hint,
-        filename=getattr(upload, "name", ""),
+        filename=filename,
         source=extracted.source,
         warnings=extracted.warnings,
         started_at=started_at,
     )
+    return result, duration
+
+
+def analyze_upload(upload):
+    result, _duration = _analyze_upload(upload)
+    return result
+
+
+def _lesson_sort_key(lesson, index):
+    stem = Path(lesson["file_name"] or "").stem
+    prefix = FILENAME_NUMBER_PREFIX.match(stem)
+    return (
+        DIFFICULTY_ORDER.get(lesson["difficulty"], len(DIFFICULTY_ORDER)),
+        0 if prefix else 1,
+        int(prefix.group(1)) if prefix else 0,
+        stem.lower(),
+        index,
+    )
+
+
+def order_lessons(analyzed_lessons):
+    """Order lessons from beginner to advanced, then by file name.
+
+    Files with a number prefix ("01_intro") keep their intended sequence;
+    everything else falls back to the alphabetical file name and finally to
+    the original upload order.
+    """
+    ordered = sorted(
+        enumerate(analyzed_lessons),
+        key=lambda item: _lesson_sort_key(item[1], item[0]),
+    )
+    lessons = []
+    for position, (_index, lesson) in enumerate(ordered, start=1):
+        lessons.append({**lesson, "order": position})
+    return lessons
+
+
+def analyze_bulk_lessons(files):
+    """Analyze several uploads at once, skipping the ones that fail."""
+    started_at = time.perf_counter()
+    analyzed = []
+    failed = []
+
+    for upload in files:
+        filename = getattr(upload, "name", "") or ""
+        try:
+            result, duration = _analyze_upload(upload)
+        except ContentAnalysisError as error:
+            failed.append({"file_name": filename, "error": str(error)})
+            continue
+        except Exception:
+            logger.exception("Bulk lesson analysis failed for %s", filename)
+            failed.append(
+                {
+                    "file_name": filename,
+                    "error": "This file could not be analyzed.",
+                }
+            )
+            continue
+
+        warnings = list(result["warnings"])
+        if duration is None:
+            warnings.append("The lesson duration could not be estimated.")
+
+        confidence = (
+            result["confidence"]["title"] + result["confidence"]["difficulty"]
+        ) / 2
+        analyzed.append(
+            {
+                "title": result["title"],
+                "description": result["description"],
+                "duration_minutes": duration,
+                "file_name": filename,
+                "file_type": result["source"],
+                "difficulty": result["difficulty"],
+                "confidence": round(confidence, 2),
+                "warnings": warnings,
+            }
+        )
+
+    lessons = order_lessons(analyzed)
+    return {
+        "lessons": lessons,
+        "processing_time_ms": round(
+            (time.perf_counter() - started_at) * 1000, 2
+        ),
+        "total_files": len(files),
+        "successful": len(lessons),
+        "failed": failed,
+    }
 
 
 def analyze_course(course):

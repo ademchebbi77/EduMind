@@ -61,6 +61,17 @@ export async function analyzeCourseContent(
   return data
 }
 
+export async function analyzeBulkLessons(files, { onUploadProgress } = {}) {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+
+  const { data } = await api.post('/courses/analyze-bulk-lessons/', formData, {
+    onUploadProgress,
+    timeout: 0,
+  })
+  return data
+}
+
 export async function createCourse(formData, { onUploadProgress } = {}) {
   const { data } = await api.post('/courses/', formData, {
     onUploadProgress,

@@ -17,6 +17,7 @@ from accounts.models import User
 
 from .content_analyzer import (
     ContentAnalysisError,
+    analyze_bulk_lessons as analyze_bulk_lesson_files,
     analyze_course,
     analyze_upload,
 )
@@ -41,6 +42,7 @@ from .models import (
 from .permissions import CanManageCategory, CanManageCourse, CanManageEnrollment
 from .progress import get_or_create_progress, record_progress
 from .serializers import (
+    BulkLessonAnalysisSerializer,
     CategorySerializer,
     CourseContentAnalysisSerializer,
     CourseProgressSerializer,
@@ -53,6 +55,7 @@ from .serializers import (
     LessonReorderSerializer,
     LessonSerializer,
 )
+from .throttling import check_bulk_lesson_analysis_throttle
 from .transcripts import (
     enqueue_transcript,
     fail_stale_transcript,
@@ -233,6 +236,21 @@ class CourseViewSet(viewsets.ModelViewSet):
             ) from error
 
         return Response(result)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="analyze-bulk-lessons",
+        url_name="analyze-bulk-lessons",
+    )
+    def analyze_bulk_lessons(self, request):
+        payload = BulkLessonAnalysisSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+
+        check_bulk_lesson_analysis_throttle(request.user.id)
+        return Response(
+            analyze_bulk_lesson_files(payload.validated_data["files"])
+        )
 
     @action(detail=True, methods=["get"], url_path="file", url_name="file")
     def serve_file(self, request, pk=None):

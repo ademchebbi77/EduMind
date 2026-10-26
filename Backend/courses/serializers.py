@@ -308,6 +308,18 @@ class CourseContentAnalysisSerializer(serializers.Serializer):
         return attrs
 
 
+class BulkLessonAnalysisSerializer(serializers.Serializer):
+    files = serializers.ListField(
+        child=serializers.FileField(validators=[validate_course_file]),
+        min_length=1,
+        max_length=10,
+        error_messages={
+            "min_length": "Upload at least 1 file.",
+            "max_length": "Upload 1-10 files maximum.",
+        },
+    )
+
+
 class CourseProgressUpdateSerializer(serializers.Serializer):
     video_duration_seconds = serializers.IntegerField(min_value=0, required=False)
     video_watched_seconds = serializers.IntegerField(min_value=0, required=False)

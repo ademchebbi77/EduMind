@@ -6,23 +6,26 @@ import {
   GripVertical,
   Plus,
   RotateCcw,
+  Sparkles,
   Trash2,
   UploadCloud,
   X,
 } from 'lucide-react'
 import {
+  analyzeBulkLessons,
   createLesson,
   deleteLesson,
   fetchLessons,
   reorderLessons,
   updateLesson,
 } from '../../api/courses'
-import { isCanceled, normalizeApiError } from '../../lib/api'
+import { firstFieldError, isCanceled, normalizeApiError } from '../../lib/api'
 import { fileExtension, formatBytes } from '../../lib/format'
 import { validateVideoUrl } from '../../lib/video'
 import { Badge } from '../ui/Badge'
 import { Button } from '../ui/Button'
 import { Input, Textarea } from '../ui/Field'
+import BulkLessonModal from './BulkLessonModal'
 
 const FILE_TYPE_LABELS = {
   pdf: 'PDF',
@@ -31,6 +34,16 @@ const FILE_TYPE_LABELS = {
 }
 
 const VIDEO_EXTENSIONS = ['mp4', 'webm', 'avi']
+const MAX_BULK_FILES = 10
+
+const EMPTY_BULK_STATE = {
+  open: false,
+  batchId: 0,
+  loading: false,
+  error: '',
+  files: [],
+  result: null,
+}
 
 function fileKind(name) {
   const extension = fileExtension(name)
@@ -113,8 +126,12 @@ const LessonsEditor = forwardRef(function LessonsEditor(
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [reload, setReload] = useState(0)
+  const [bulk, setBulk] = useState(EMPTY_BULK_STATE)
+  const [bulkSelectionError, setBulkSelectionError] = useState('')
   const nextKeyRef = useRef(1)
   const originalIdsRef = useRef([])
+  const bulkInputRef = useRef(null)
+  const bulkRequestRef = useRef(0)
 
   useEffect(() => {
     if (!courseId) return undefined
@@ -183,6 +200,75 @@ const LessonsEditor = forwardRef(function LessonsEditor(
       file: fileError ? null : file,
       fileError: fileError || null,
     })
+  }
+
+  function closeBulk() {
+    bulkRequestRef.current += 1
+    setBulk(EMPTY_BULK_STATE)
+  }
+
+  async function handleBulkFiles(event) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (!files.length) return
+
+    if (files.length > MAX_BULK_FILES) {
+      setBulkSelectionError(
+        `Upload 1-${MAX_BULK_FILES} files maximum. You selected ${files.length}.`,
+      )
+      return
+    }
+
+    const fileErrors = files
+      .map((file) => {
+        const message = validateFile ? validateFile(file) : null
+        return message ? `${file.name}: ${message}` : null
+      })
+      .filter(Boolean)
+    if (fileErrors.length) {
+      setBulkSelectionError(fileErrors.join(' '))
+      return
+    }
+
+    setBulkSelectionError('')
+    const requestId = bulkRequestRef.current + 1
+    bulkRequestRef.current = requestId
+    setBulk({
+      open: true,
+      batchId: requestId,
+      loading: true,
+      error: '',
+      files,
+      result: null,
+    })
+
+    try {
+      const result = await analyzeBulkLessons(files)
+      if (bulkRequestRef.current !== requestId) return
+      setBulk((current) => ({ ...current, loading: false, result }))
+    } catch (requestError) {
+      if (bulkRequestRef.current !== requestId) return
+      const error = normalizeApiError(requestError, 'Unable to analyze these files.')
+      setBulk((current) => ({
+        ...current,
+        loading: false,
+        error: firstFieldError(error.fields, 'files') || error.message,
+      }))
+    }
+  }
+
+  function addBulkLessons(drafts) {
+    setRows((current) => [
+      ...current,
+      ...drafts.map((draft) => ({
+        ...emptyRow(nextKeyRef.current++),
+        title: draft.title.trim(),
+        description: draft.description.trim(),
+        duration: draft.duration,
+        file: draft.file,
+      })),
+    ])
+    closeBulk()
   }
 
   const validateRows = useCallback(() => {
@@ -300,6 +386,40 @@ const LessonsEditor = forwardRef(function LessonsEditor(
             <RotateCcw className="size-4" aria-hidden="true" />
             Try again
           </Button>
+        </div>
+      ) : null}
+
+      {!loading && !loadError ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => bulkInputRef.current?.click()}
+              disabled={disabled || saving}
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              Bulk Upload with AI
+            </Button>
+            <span className="text-xs text-slate-500">
+              Select 1–{MAX_BULK_FILES} files and let local AI draft each lesson.
+            </span>
+          </div>
+          <input
+            ref={bulkInputRef}
+            type="file"
+            multiple
+            accept={accept}
+            className="sr-only"
+            aria-label="Bulk lesson files"
+            disabled={disabled || saving}
+            onChange={handleBulkFiles}
+          />
+          {bulkSelectionError ? (
+            <p role="alert" className="text-xs font-medium text-clay">
+              {bulkSelectionError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -501,6 +621,17 @@ const LessonsEditor = forwardRef(function LessonsEditor(
           Saving lessons…
         </p>
       ) : null}
+
+      <BulkLessonModal
+        open={bulk.open}
+        batchKey={bulk.batchId}
+        files={bulk.files}
+        result={bulk.result}
+        loading={bulk.loading}
+        error={bulk.error}
+        onClose={closeBulk}
+        onAdd={addBulkLessons}
+      />
     </div>
   )
 })
