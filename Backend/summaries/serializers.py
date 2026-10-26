@@ -36,6 +36,7 @@ class SummarySerializer(serializers.ModelSerializer):
             "title",
             "content",
             "key_concepts",
+            "tags",
             "language",
             "source",
             "ai_model",
@@ -91,6 +92,12 @@ class SummarySerializer(serializers.ModelSerializer):
                 )
             concepts.append({"term": term, "definition": definition})
         return concepts
+
+    def validate_tags(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Tags must be a list.")
+        tags = [str(tag).strip()[:50] for tag in value if isinstance(tag, str) and tag.strip()]
+        return tags[:20]  # Max 20 tags
 
     def validate(self, attrs):
         if "content" in attrs:
