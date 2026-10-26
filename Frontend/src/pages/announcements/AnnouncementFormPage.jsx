@@ -7,6 +7,8 @@ import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import { firstFieldError, isCanceled, normalizeApiError } from '../../lib/api'
 import { ANNOUNCEMENT_CATEGORIES } from '../../lib/categories'
+import { localSchedule } from '../../lib/announcementExtraction'
+import { AnnouncementExtractor } from '../../components/announcements/AnnouncementExtractor'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
@@ -99,6 +101,35 @@ export default function AnnouncementFormPage() {
     if (session.meeting_link) {
       updateField('event_link', session.meeting_link)
     }
+  }
+
+  // Champs proposés par l'analyse locale du texte (déjà confirmés par l'utilisateur).
+  function applyExtraction(updates, fields) {
+    const next = { ...updates }
+    const session = fields.related_session
+    if (updates.related_session && session?.detected) {
+      // La session doit figurer dans la liste déroulante pour être affichée.
+      if (!sessions.some((s) => String(s.id) === String(session.value))) {
+        setSessions((list) => [
+          ...list,
+          { id: session.value, title: session.label, session_type: session.session_type, starts_at: session.starts_at, meeting_link: session.meeting_link },
+        ])
+      }
+      // Comme une sélection manuelle : la session complète date, heure et lien encore vides.
+      const schedule = session.starts_at ? localSchedule(session.starts_at) : {}
+      const fromSession = { ...schedule, event_link: session.meeting_link || '' }
+      for (const [name, value] of Object.entries(fromSession)) {
+        if (value && !(name in next) && !values[name]) next[name] = value
+      }
+    }
+    setValues((v) => ({ ...v, ...next }))
+    setErrors((e) => {
+      const cleared = { ...e }
+      for (const name of Object.keys(next)) cleared[name] = undefined
+      return cleared
+    })
+    const count = Object.keys(updates).length
+    addToast({ type: 'success', message: `${count} champ${count > 1 ? 's' : ''} appliqué${count > 1 ? 's' : ''} au formulaire.` })
   }
 
   function validate() {
@@ -224,6 +255,8 @@ export default function AnnouncementFormPage() {
           {formError}
         </div>
       )}
+
+      <AnnouncementExtractor values={values} onApply={applyExtraction} disabled={saving} />
 
       <form onSubmit={handleSubmit} noValidate aria-busy={saving || undefined}>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

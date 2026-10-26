@@ -9,10 +9,20 @@ from rest_framework.response import Response
 from accounts.models import User
 from accounts.permissions import IsAdminRole
 
+from sessions.models import LiveSession
+
 from .categorization import CATEGORY_KEYS, CATEGORY_LABELS, categorize
+from .extraction import extract_announcement
 from .models import Announcement, AnnouncementEnrollment
 from .permissions import CanManageAnnouncement
-from .serializers import AnnouncementEnrollmentSerializer, AnnouncementSerializer
+from .serializers import (
+    AnnouncementEnrollmentSerializer,
+    AnnouncementExtractionSerializer,
+    AnnouncementSerializer,
+)
+
+# Sessions à venir comparées au texte (TF-IDF) pour proposer la session liée.
+MAX_SESSIONS_COMPARED = 300
 
 
 class AnnouncementViewSet(viewsets.ModelViewSet):
@@ -62,6 +72,27 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         """Liste les catégories disponibles (calculées localement)."""
         return Response(
             [{"key": key, "label": label} for key, label in CATEGORY_LABELS.items()]
+        )
+
+    @action(detail=False, methods=["post"], url_path="extract")
+    @method_decorator(csrf_protect)
+    def extract(self, request):
+        """Pré-remplit le formulaire à partir d'un texte : analyse 100 % locale.
+
+        Réservé aux rôles qui peuvent publier (CanManageAnnouncement refuse le POST
+        aux étudiants). Rien n'est enregistré : la réponse est une proposition.
+        """
+        payload = AnnouncementExtractionSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        sessions = LiveSession.objects.filter(
+            status__in=[LiveSession.Status.SCHEDULED, LiveSession.Status.ONGOING]
+        ).order_by("starts_at")[:MAX_SESSIONS_COMPARED]
+        fields = extract_announcement(payload.validated_data["text"], sessions=sessions)
+        return Response(
+            {
+                "fields": fields,
+                "detected_count": sum(1 for field in fields.values() if field["detected"]),
+            }
         )
 
     def perform_create(self, serializer):

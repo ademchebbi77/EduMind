@@ -31,6 +31,15 @@ export async function deleteAnnouncement(id) {
 }
 
 /**
+ * Analyse locale d'un texte descriptif : propose les champs du formulaire avec
+ * une confiance. Rien n'est enregistré côté serveur.
+ */
+export async function extractAnnouncementFields(text) {
+  const { data } = await api.post('/announcements/extract/', { text })
+  return data
+}
+
+/**
  * Inscriptions aux annonces
  */
 export async function enrollInAnnouncement(announcementId, data) {
