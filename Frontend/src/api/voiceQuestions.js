@@ -48,3 +48,30 @@ export async function retryVoiceQuestion(questionId) {
 export async function deleteVoiceQuestion(questionId) {
   await api.delete(`/voice-questions/${questionId}/`)
 }
+
+/** ``rating`` is "helpful" or "not_helpful"; a ``reason`` is required for the latter. */
+export async function rateVoiceQuestion(questionId, { rating, reason = '', comment = '' }) {
+  const { data } = await api.post(`/voice-questions/${questionId}/rate/`, { rating, reason, comment })
+  return data
+}
+
+export async function escalateVoiceQuestion(questionId) {
+  const { data } = await api.post(`/voice-questions/${questionId}/escalate/`)
+  return data
+}
+
+// --- Teacher review of questions sent after an unhelpful AI answer ---------------
+
+export async function fetchVoiceReviews({ status = '', page = 1 } = {}, { signal } = {}) {
+  const params = { page }
+  if (status) params.status = status
+  const { data } = await api.get('/voice-questions/reviews/', { params, signal })
+  return data
+}
+
+export async function answerVoiceReview(questionId, teacherAnswer) {
+  const { data } = await api.post(`/voice-questions/reviews/${questionId}/answer/`, {
+    teacher_answer: teacherAnswer,
+  })
+  return data
+}

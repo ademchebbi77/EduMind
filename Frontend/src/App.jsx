@@ -28,6 +28,7 @@ import QuizGeneratorPage from './pages/assessments/QuizGeneratorPage'
 import QuizResultPage from './pages/assessments/QuizResultPage'
 import QuizTakePage from './pages/assessments/QuizTakePage'
 import VoiceQuestionsPage from './pages/voice/VoiceQuestionsPage'
+import VoiceReviewsPage from './pages/voice/VoiceReviewsPage'
 import JoinLivePage from './pages/live/JoinLivePage'
 import LiveGamePage from './pages/live/LiveGamePage'
 import ResourceDetailPage from './pages/summaries/ResourceDetailPage'
@@ -142,6 +143,14 @@ export default function App() {
                 <Route path="/live" element={<JoinLivePage />} />
                 <Route path="/live/:gameId" element={<LiveGamePage />} />
                 <Route path="/voice-questions" element={<VoiceQuestionsPage />} />
+                <Route
+                  path="/voice-questions/reviews"
+                  element={
+                    <RequireRole roles={COURSE_MANAGER_ROLES}>
+                      <VoiceReviewsPage />
+                    </RequireRole>
+                  }
+                />
                 <Route
                   path="/quizzes/new"
                   element={

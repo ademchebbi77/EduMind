@@ -67,10 +67,18 @@ class AskSerializer(serializers.Serializer):
     question_text = serializers.CharField(max_length=MAX_QUESTION_CHARS, trim_whitespace=True)
 
 
+def _display_name(user):
+    if user is None:
+        return ""
+    return user.get_full_name().strip() or user.email
+
+
 class VoiceQuestionSerializer(serializers.ModelSerializer):
     course_title = serializers.CharField(source="course.title", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     audio_url = serializers.SerializerMethodField()
+    review_status = serializers.CharField(read_only=True)
+    teacher_answered_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = VoiceQuestion
@@ -96,11 +104,97 @@ class VoiceQuestionSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "answered_at",
+            "rating",
+            "rating_reason",
+            "rating_comment",
+            "rated_at",
+            "escalated_at",
+            "review_status",
+            "teacher_answer",
+            "teacher_answered_by_name",
+            "teacher_answered_at",
         )
         read_only_fields = fields
 
     def get_audio_url(self, obj):
         return reverse("voice-question-audio", kwargs={"pk": obj.pk})
+
+    def get_teacher_answered_by_name(self, obj):
+        return _display_name(obj.teacher_answered_by) if obj.teacher_answer else ""
+
+
+MAX_FEEDBACK_CHARS = 500
+
+
+class RateSerializer(serializers.Serializer):
+    """The student's opinion of an AI answer. A reason is required when it did not help."""
+
+    rating = serializers.ChoiceField(choices=VoiceQuestion.Rating.choices)
+    reason = serializers.ChoiceField(
+        choices=VoiceQuestion.RatingReason.choices, required=False, allow_blank=True
+    )
+    comment = serializers.CharField(
+        max_length=MAX_FEEDBACK_CHARS, required=False, allow_blank=True
+    )
+
+    def validate(self, attrs):
+        if attrs["rating"] == VoiceQuestion.Rating.HELPFUL:
+            attrs["reason"], attrs["comment"] = "", ""
+        elif not attrs.get("reason"):
+            raise serializers.ValidationError({"reason": "Tell us what was wrong with the answer."})
+        attrs["comment"] = attrs.get("comment", "").strip()
+        return attrs
+
+
+class VoiceReviewSerializer(serializers.ModelSerializer):
+    """A question sent to the teacher, as the teacher sees it."""
+
+    course_title = serializers.CharField(source="course.title", read_only=True)
+    student_name = serializers.SerializerMethodField()
+    rating_reason_display = serializers.CharField(
+        source="get_rating_reason_display", read_only=True
+    )
+    review_status = serializers.CharField(read_only=True)
+    teacher_answered_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = VoiceQuestion
+        fields = (
+            "id",
+            "course",
+            "course_title",
+            "student_name",
+            "question_text",
+            "detected_language",
+            "answer",
+            "answer_language",
+            "answered_at",
+            "rating_reason",
+            "rating_reason_display",
+            "rating_comment",
+            "escalated_at",
+            "review_status",
+            "teacher_answer",
+            "teacher_answered_by_name",
+            "teacher_answered_at",
+        )
+        read_only_fields = fields
+
+    def get_student_name(self, obj):
+        return _display_name(obj.student)
+
+    def get_teacher_answered_by_name(self, obj):
+        return _display_name(obj.teacher_answered_by) if obj.teacher_answer else ""
+
+
+class TeacherAnswerSerializer(serializers.Serializer):
+    teacher_answer = serializers.CharField(max_length=MAX_QUESTION_CHARS * 2, trim_whitespace=False)
+
+    def validate_teacher_answer(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Write the answer first.")
+        return value
 
 
 MAX_COMMENT_CHARS = 2000

@@ -13,6 +13,7 @@ import {
   LogOut,
   Megaphone,
   Menu,
+  MessageSquareWarning,
   Mic,
   Pencil,
   Plus,
@@ -152,6 +153,10 @@ function SidebarContent({ user, onNavigate, onClose, closeButtonRef }) {
             <NavLink to="/course-enrollments" onClick={onNavigate} className={navLinkClasses}>
               <ClipboardList className="size-5" aria-hidden="true" />
               Course enrollments
+            </NavLink>
+            <NavLink to="/voice-questions/reviews" onClick={onNavigate} className={navLinkClasses}>
+              <MessageSquareWarning className="size-5" aria-hidden="true" />
+              Questions to review
             </NavLink>
             <NavLink to="/quizzes/new" onClick={onNavigate} className={navLinkClasses}>
               <Plus className="size-5" aria-hidden="true" />

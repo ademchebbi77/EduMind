@@ -32,6 +32,17 @@ class VoiceQuestion(models.Model):
         ENGLISH = "en", "English"
         ARABIC = "ar", "Arabic"
 
+    class Rating(models.TextChoices):
+        HELPFUL = "helpful", "Helpful"
+        NOT_HELPFUL = "not_helpful", "Not helpful"
+
+    class RatingReason(models.TextChoices):
+        INCOMPLETE = "incomplete", "Incomplete"
+        WRONG = "wrong", "Wrong"
+        TOO_COMPLEX = "too_complex", "Too complex"
+        OFF_TOPIC = "off_topic", "Off topic"
+        OTHER = "other", "Other"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -71,11 +82,32 @@ class VoiceQuestion(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     answered_at = models.DateTimeField(null=True, blank=True)
 
+    # The student's opinion of the AI answer.
+    rating = models.CharField(max_length=12, choices=Rating.choices, blank=True)
+    rating_reason = models.CharField(max_length=12, choices=RatingReason.choices, blank=True)
+    rating_comment = models.TextField(blank=True)
+    rated_at = models.DateTimeField(null=True, blank=True)
+
+    # Sent to the course teacher after an unhelpful answer, and the verified answer.
+    escalated_at = models.DateTimeField(null=True, blank=True)
+    teacher_answer = models.TextField(blank=True)
+    teacher_answered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    teacher_answered_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "voice question"
         verbose_name_plural = "voice questions"
-        indexes = [models.Index(fields=["student", "-created_at"])]
+        indexes = [
+            models.Index(fields=["student", "-created_at"]),
+            models.Index(fields=["course", "escalated_at"]),
+        ]
 
     def __str__(self):
         return (self.question_text or self.transcript or self.audio_name)[:80]
@@ -83,6 +115,13 @@ class VoiceQuestion(models.Model):
     @property
     def is_busy(self):
         return self.status in {self.Status.TRANSCRIBING, self.Status.ANSWERING}
+
+    @property
+    def review_status(self):
+        """``""`` (not sent to the teacher), ``"pending"`` or ``"answered"``."""
+        if self.escalated_at is None:
+            return ""
+        return "answered" if self.teacher_answer else "pending"
 
 
 class CourseComment(models.Model):

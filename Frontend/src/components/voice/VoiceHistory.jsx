@@ -12,6 +12,11 @@ const STATUS_BADGES = {
   answered: ['success', 'Answered'],
   failed: ['clay', 'Failed'],
 }
+// Questions sent to the teacher after an unhelpful AI answer.
+const REVIEW_BADGES = {
+  pending: ['warning', 'With your teacher'],
+  answered: ['sage', 'Verified by the teacher'],
+}
 
 export function VoiceHistory({ items, loading, error, activeId, onSelect, onDelete }) {
   return (
@@ -55,6 +60,11 @@ export function VoiceHistory({ items, loading, error, activeId, onSelect, onDele
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
                     <Badge variant={variant}>{label}</Badge>
+                    {item.review_status ? (
+                      <Badge variant={REVIEW_BADGES[item.review_status][0]}>
+                        {REVIEW_BADGES[item.review_status][1]}
+                      </Badge>
+                    ) : null}
                     <span className="truncate">{item.course_title}</span>
                     <span>· {formatDate(item.created_at)}</span>
                   </span>

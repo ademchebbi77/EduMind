@@ -24,8 +24,11 @@ from .serializers import (
     AskSerializer,
     CommentReplySerializer,
     CourseCommentSerializer,
+    RateSerializer,
+    TeacherAnswerSerializer,
     VoiceQuestionCreateSerializer,
     VoiceQuestionSerializer,
+    VoiceReviewSerializer,
 )
 from .services import (
     answers_enabled,
@@ -158,6 +161,10 @@ class VoiceQuestionViewSet(
             raise serializers.ValidationError(
                 {"non_field_errors": ["The recording has not been transcribed yet."]}
             )
+        if question.escalated_at:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["This question was sent to your teacher and can no longer be changed."]}
+            )
         _require(answers_enabled(), "AI answers", "GEMINI_API_KEY")
         payload = AskSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
@@ -167,6 +174,9 @@ class VoiceQuestionViewSet(
         question.answer = ""
         question.failed_stage = ""
         question.error_message = ""
+        # A new answer gets a new rating.
+        question.rating = question.rating_reason = question.rating_comment = ""
+        question.rated_at = None
         question.save()
 
         from .tasks import answer_question_task
@@ -200,6 +210,48 @@ class VoiceQuestionViewSet(
         _enqueue(task, question, stage)
         question.refresh_from_db()
         return Response(self.get_serializer(question).data, status=status.HTTP_202_ACCEPTED)
+
+    def _answered_question(self):
+        question = self.get_object()
+        if question.status != Status.ANSWERED:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Wait for the AI answer first."]}
+            )
+        return question
+
+    @action(detail=True, methods=["post"])
+    def rate(self, request, pk=None):
+        """The student says whether the AI answer helped (and why not)."""
+        question = self._answered_question()
+        if question.escalated_at:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["This question was already sent to your teacher."]}
+            )
+        payload = RateSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        data = payload.validated_data
+        question.rating = data["rating"]
+        question.rating_reason = data["reason"]
+        question.rating_comment = data["comment"]
+        question.rated_at = timezone.now()
+        question.save(update_fields=["rating", "rating_reason", "rating_comment", "rated_at", "updated_at"])
+        return Response(self.get_serializer(question).data)
+
+    @action(detail=True, methods=["post"])
+    def escalate(self, request, pk=None):
+        """Send an unhelpful AI answer to the course teacher for a verified answer."""
+        question = self._answered_question()
+        if question.rating != VoiceQuestion.Rating.NOT_HELPFUL:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["Tell us why the answer did not help before asking your teacher."]}
+            )
+        if question.escalated_at:
+            raise serializers.ValidationError(
+                {"non_field_errors": ["This question was already sent to your teacher."]}
+            )
+        question.escalated_at = timezone.now()
+        question.save(update_fields=["escalated_at", "updated_at"])
+        return Response(self.get_serializer(question).data)
 
     @action(detail=True, methods=["get"], url_path="audio", url_name="audio")
     def audio(self, request, pk=None):
@@ -235,6 +287,56 @@ class VoiceConfigView(APIView):
                 "server_time": timezone.now(),
             }
         )
+
+
+class VoiceReviewViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    """Questions students sent to their teacher after an unhelpful AI answer.
+
+    A teacher sees those of their own courses, an admin all of them.
+    ``?status=pending|answered`` and ``?course=<id>`` filter the list.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = VoiceReviewSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role not in {User.Role.TEACHER, User.Role.ADMIN}:
+            raise PermissionDenied("Only teachers can review questions.")
+        queryset = VoiceQuestion.objects.select_related(
+            "course", "student", "teacher_answered_by"
+        ).filter(escalated_at__isnull=False).order_by("-escalated_at")
+        if user.role == User.Role.TEACHER:
+            queryset = queryset.filter(course__owner=user)
+
+        params = self.request.query_params
+        review_status = params.get("status")
+        if review_status == "pending":
+            queryset = queryset.filter(teacher_answer="")
+        elif review_status == "answered":
+            queryset = queryset.exclude(teacher_answer="")
+        elif review_status:
+            raise serializers.ValidationError({"status": "Use “pending” or “answered”."})
+        course = params.get("course")
+        if course:
+            if not course.isdigit():
+                raise serializers.ValidationError({"course": "Invalid course."})
+            queryset = queryset.filter(course_id=course)
+        return queryset
+
+    @action(detail=True, methods=["post"])
+    def answer(self, request, pk=None):
+        """Write (or rewrite) the verified answer the student will see."""
+        question = self.get_object()
+        payload = TeacherAnswerSerializer(data=request.data)
+        payload.is_valid(raise_exception=True)
+        question.teacher_answer = payload.validated_data["teacher_answer"]
+        question.teacher_answered_by = request.user
+        question.teacher_answered_at = timezone.now()
+        question.save(
+            update_fields=["teacher_answer", "teacher_answered_by", "teacher_answered_at", "updated_at"]
+        )
+        return Response(self.get_serializer(question).data)
 
 
 class CommentCreateThrottle(UserRateThrottle):

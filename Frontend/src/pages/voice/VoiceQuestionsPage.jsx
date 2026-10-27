@@ -40,6 +40,7 @@ import { Modal } from '../../components/ui/Modal'
 import { PageLoader } from '../../components/ui/Skeleton'
 import { FileDropzone } from '../../components/courses/FileDropzone'
 import { FilePreview } from '../../components/courses/FilePreview'
+import { AnswerFeedback, TeacherAnswer } from '../../components/voice/AnswerFeedback'
 import { AudioRecorder } from '../../components/voice/AudioRecorder'
 import { VoiceHistory } from '../../components/voice/VoiceHistory'
 
@@ -215,6 +216,15 @@ export default function VoiceQuestionsPage() {
     },
     [setSearchParams],
   )
+
+  // After a rating or a request to the teacher: refresh the question and its history entry.
+  function updateCurrent(question) {
+    setCurrent(question)
+    setHistory((state) => ({
+      ...state,
+      items: state.items.map((item) => (item.id === question.id ? question : item)),
+    }))
+  }
 
   function startOver() {
     setCurrent(null)
@@ -600,23 +610,33 @@ export default function VoiceQuestionsPage() {
                   AI answers can contain mistakes. Check important points in the course material.
                   Answered on {formatDate(current.answered_at)}.
                 </p>
+                <div className="mt-4">
+                  <AnswerFeedback key={current.id} question={current} onChange={updateCurrent} />
+                </div>
                 <div className="mt-5 flex flex-col-reverse gap-3 border-t border-line pt-4 sm:flex-row sm:justify-end">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setDraft(current.question_text)
-                      setEditing(true)
-                    }}
-                  >
-                    <Pencil className="size-4" aria-hidden="true" />
-                    Edit and ask again
-                  </Button>
+                  {/* A question sent to the teacher stays as it was asked. */}
+                  {!current.escalated_at ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setDraft(current.question_text)
+                        setEditing(true)
+                      }}
+                    >
+                      <Pencil className="size-4" aria-hidden="true" />
+                      Edit and ask again
+                    </Button>
+                  ) : null}
                   <Button onClick={startOver}>
                     <Volume2 className="size-4" aria-hidden="true" />
                     Ask another question
                   </Button>
                 </div>
               </Card>
+            ) : null}
+
+            {current?.status === 'answered' && current.review_status === 'answered' && !editing ? (
+              <TeacherAnswer question={current} />
             ) : null}
 
             {current?.status === 'failed' && !editing ? (
