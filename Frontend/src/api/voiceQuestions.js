@@ -1,5 +1,8 @@
 import { api } from '../lib/api'
 
+// On a server without a background worker, the AI work runs during the request.
+const AI_TIMEOUT = 180000
+
 export async function fetchVoiceConfig({ signal } = {}) {
   const { data } = await api.get('/voice-questions/config/', { signal })
   return data
@@ -19,19 +22,26 @@ export async function fetchVoiceQuestion(questionId, { signal } = {}) {
 
 /** ``formData`` holds ``course``, ``language`` and the ``audio`` file. */
 export async function createVoiceQuestion(formData, { onUploadProgress } = {}) {
-  const { data } = await api.post('/voice-questions/', formData, { onUploadProgress })
-  return data
-}
-
-export async function askVoiceQuestion(questionId, questionText) {
-  const { data } = await api.post(`/voice-questions/${questionId}/ask/`, {
-    question_text: questionText,
+  const { data } = await api.post('/voice-questions/', formData, {
+    onUploadProgress,
+    timeout: AI_TIMEOUT,
   })
   return data
 }
 
+export async function askVoiceQuestion(questionId, questionText) {
+  const { data } = await api.post(
+    `/voice-questions/${questionId}/ask/`,
+    { question_text: questionText },
+    { timeout: AI_TIMEOUT },
+  )
+  return data
+}
+
 export async function retryVoiceQuestion(questionId) {
-  const { data } = await api.post(`/voice-questions/${questionId}/retry/`)
+  const { data } = await api.post(`/voice-questions/${questionId}/retry/`, null, {
+    timeout: AI_TIMEOUT,
+  })
   return data
 }
 

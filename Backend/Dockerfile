@@ -29,4 +29,5 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=60s --retries=12 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/config/', timeout=4)" || exit 1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "180", "--access-logfile", "-"]
+# PORT is set by hosts such as Render; small servers use GUNICORN_WORKERS=1.
+CMD ["sh", "-c", "exec gunicorn config.wsgi:application --bind 0.0.0.0:${PORT:-8000} --workers ${GUNICORN_WORKERS:-3} --threads ${GUNICORN_THREADS:-1} --timeout ${GUNICORN_TIMEOUT:-180} --access-logfile -"]

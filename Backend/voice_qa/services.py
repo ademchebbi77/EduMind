@@ -1,12 +1,19 @@
-"""Speech-to-text (OpenAI Whisper API) and course-aware answers (Google Gemini API).
+"""Speech-to-text (local Whisper, OpenAI Whisper API or Gemini) and course-aware
+answers (Google Gemini API).
 
 API keys are read from the server settings and only sent to the providers. Any
 provider error is turned into a short, user-safe message; details are logged.
 """
 
+import base64
+import importlib.util
+import json
 import logging
 import re
+import subprocess
+import tempfile
 import time
+from pathlib import Path
 from statistics import mean
 
 import httpx
@@ -43,19 +50,31 @@ class ServiceError(Exception):
         self.retryable = retryable
 
 
+def transcription_provider():
+    """``local`` (Whisper on the server, default), ``openai`` or ``gemini``."""
+    provider = settings.VOICE_QA_TRANSCRIPTION_PROVIDER
+    return provider if provider in {"openai", "gemini"} else "local"
+
+
 def use_local_whisper():
-    return settings.VOICE_QA_TRANSCRIPTION_PROVIDER != "openai"
+    return transcription_provider() == "local"
 
 
 def transcription_model_label():
-    if use_local_whisper():
+    provider = transcription_provider()
+    if provider == "local":
         return f"whisper-{settings.VOICE_QA_WHISPER_MODEL} (local)"
+    if provider == "gemini":
+        return f"{settings.GEMINI_MODEL} (speech)"
     return settings.OPENAI_TRANSCRIBE_MODEL
 
 
 def transcription_enabled():
-    if use_local_whisper():
+    provider = transcription_provider()
+    if provider == "local":
         return local_whisper.available()
+    if provider == "gemini":
+        return bool(settings.GEMINI_API_KEY) and importlib.util.find_spec("imageio_ffmpeg") is not None
     return bool(settings.OPENAI_API_KEY)
 
 
@@ -104,8 +123,10 @@ def transcribe(audio_file, filename, content_type, language_hint="auto"):
     """Return ``(text, language_code)`` for an audio file, with the configured engine."""
     if not transcription_enabled():
         raise ServiceError("Speech recognition is not configured on the server.", retryable=False)
-    if not use_local_whisper():
+    if transcription_provider() == "openai":
         return _transcribe_openai(audio_file, filename, content_type, language_hint)
+    if transcription_provider() == "gemini":
+        return _transcribe_gemini(audio_file, filename, language_hint)
 
     try:
         text, language = local_whisper.transcribe(audio_file.read(), filename, language_hint)
@@ -320,16 +341,110 @@ def answer_question(question, course, student, language, history=()):
         "contents": [*turns, {"role": "user", "parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.4, "maxOutputTokens": 1024},
     }
+    answer, model = _gemini_with_fallback(body)
+    return answer, source, model
+
+
+def _gemini_with_fallback(body):
+    """Return ``(text, model)``, trying the fallback model on temporary failures."""
     last_error = None
     for model in gemini_models():
         try:
-            return _call_gemini(model, body), source, model
+            return _call_gemini(model, body), model
         except ServiceError as error:
             if not error.retryable:
                 raise
             logger.warning("Gemini model %s failed (%s); trying the next model", model, error.message)
             last_error = error
     raise last_error
+
+
+# --- Gemini speech-to-text (VOICE_QA_TRANSCRIPTION_PROVIDER=gemini) -----------------
+# Used where local Whisper does not fit (small cloud servers): free with the Gemini key.
+
+TRANSCRIBE_PROMPT = (
+    "Transcribe this recording of a student asking a question about a course. "
+    "Write exactly what is said, in the language spoken (French, English or Arabic): "
+    "do not translate, correct, answer or add anything. "
+    "If there is no intelligible speech, return an empty text."
+)
+TRANSCRIPT_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "text": {"type": "STRING"},
+        "language": {"type": "STRING", "enum": ["fr", "en", "ar", "other"]},
+    },
+    "required": ["text", "language"],
+}
+
+
+def _compress_audio(audio_bytes, suffix):
+    """Any recording → small mono MP3, a format Gemini reads (browser WebM is not)."""
+    import imageio_ffmpeg
+
+    with tempfile.TemporaryDirectory(prefix="edumind-voice-") as directory:
+        source = Path(directory) / f"input{suffix or '.bin'}"
+        target = Path(directory) / "audio.mp3"
+        source.write_bytes(audio_bytes)
+        command = [
+            imageio_ffmpeg.get_ffmpeg_exe(),
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-i", str(source),
+            "-t", str(settings.VOICE_QA_MAX_RECORDING_SECONDS + 30),
+            "-vn", "-ac", "1", "-ar", "16000", "-b:a", "32k",
+            str(target),
+        ]
+        try:
+            result = subprocess.run(
+                command, capture_output=True, text=True,
+                timeout=settings.VOICE_QA_FFMPEG_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise ServiceError("Reading the recording took too long.", retryable=False) from error
+        except OSError as error:
+            logger.exception("ffmpeg could not start")
+            raise ServiceError("The audio decoder could not be started.", retryable=False) from error
+        if result.returncode != 0 or not target.exists():
+            logger.warning("ffmpeg failed: %s", result.stderr[:300])
+            raise ServiceError("This recording could not be read. Try another file.", retryable=False)
+        return target.read_bytes()
+
+
+def _transcribe_gemini(audio_file, filename, language_hint):
+    audio = _compress_audio(audio_file.read(), Path(filename).suffix.lower())
+    prompt = TRANSCRIBE_PROMPT
+    if language_hint in LANGUAGE_NAMES:
+        prompt += f" The student said they speak {LANGUAGE_NAMES[language_hint]}."
+    body = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {"inlineData": {"mimeType": "audio/mp3", "data": base64.b64encode(audio).decode("ascii")}},
+                    {"text": prompt},
+                ],
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0,
+            "responseMimeType": "application/json",
+            "responseSchema": TRANSCRIPT_SCHEMA,
+        },
+    }
+    raw, _ = _gemini_with_fallback(body)
+    try:
+        payload = json.loads(raw)
+    except ValueError as error:
+        logger.warning("Gemini returned an unreadable transcript: %s", raw[:200])
+        raise ServiceError("The speech service returned an unreadable result. Try again.") from error
+
+    text = (payload.get("text") or "").strip()
+    if not text:
+        raise ServiceError(NO_SPEECH, retryable=False)
+    language = payload.get("language") if payload.get("language") in LANGUAGE_NAMES else ""
+    if not language and language_hint in LANGUAGE_NAMES:
+        language = language_hint
+    return text, language or question_language(text)
 
 
 def timed(function, *args, **kwargs):

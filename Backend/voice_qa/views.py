@@ -27,7 +27,12 @@ from .serializers import (
     VoiceQuestionCreateSerializer,
     VoiceQuestionSerializer,
 )
-from .services import answers_enabled, transcription_enabled, use_local_whisper
+from .services import (
+    answers_enabled,
+    transcription_enabled,
+    transcription_provider,
+    use_local_whisper,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +67,8 @@ def _enqueue(task, question, stage):
 def _transcription_requirement():
     if use_local_whisper():
         return "the local Whisper model (pip install openai-whisper imageio-ffmpeg)"
+    if transcription_provider() == "gemini":
+        return "GEMINI_API_KEY"
     return "OPENAI_API_KEY"
 
 

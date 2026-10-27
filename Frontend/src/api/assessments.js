@@ -107,7 +107,11 @@ export async function gradeExerciseSubmission(exerciseId, submissionId, payload)
 
 /** ``formData`` holds either ``course`` or ``file``, plus the generation options. */
 export async function startQuizGeneration(formData, { onUploadProgress } = {}) {
-  const { data } = await api.post('/quiz-generator/jobs/', formData, { onUploadProgress })
+  const { data } = await api.post('/quiz-generator/jobs/', formData, {
+    onUploadProgress,
+    // Without a background worker, the generation runs during the request.
+    timeout: 180000,
+  })
   return data
 }
 

@@ -10,6 +10,9 @@ if [ "${RUN_MIGRATIONS:-1}" = "1" ]; then
   if [ "${SEED_DEMO:-0}" = "1" ]; then
     DEBUG=True python manage.py seed_demo
     python manage.py seed_courses
+  elif [ "${SEED_COURSES:-0}" = "1" ]; then
+    # Demo course catalogue only (no demo accounts). Needs a teacher account.
+    python manage.py seed_courses || echo "seed_courses skipped: sign up as a teacher, then restart."
   fi
 fi
 
