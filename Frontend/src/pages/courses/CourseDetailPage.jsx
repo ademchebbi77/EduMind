@@ -23,6 +23,7 @@ import { Button, LinkButton } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { PageLoader } from '../../components/ui/Skeleton'
+import { CourseComments } from '../../components/comments/CourseComments'
 import { CategoryBadge } from '../../components/courses/CategoryBadge'
 import { DeleteCourseModal } from '../../components/courses/DeleteCourseModal'
 import { EnrollmentButton } from '../../components/courses/EnrollmentButton'
@@ -385,6 +386,8 @@ export default function CourseDetailPage() {
           canGenerate={canEdit || course.is_enrolled}
         />
       ) : null}
+
+      <CourseComments key={course.id} courseId={course.id} />
 
       <DeleteCourseModal
         course={course}

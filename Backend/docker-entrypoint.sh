@@ -9,6 +9,7 @@ if [ "${RUN_MIGRATIONS:-1}" = "1" ]; then
   # seed_demo refuses to run without DEBUG, so DEBUG is enabled for this command only.
   if [ "${SEED_DEMO:-0}" = "1" ]; then
     DEBUG=True python manage.py seed_demo
+    python manage.py seed_courses
   fi
 fi
 

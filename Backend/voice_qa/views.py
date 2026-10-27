@@ -6,19 +6,24 @@ from django.utils import timezone
 from kombu.exceptions import OperationalError as KombuOperationalError
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import APIException, Throttled
+from rest_framework.exceptions import APIException, PermissionDenied, Throttled
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
+from accounts.models import User
 from courses.file_serving import build_file_response
 
 from .jobs import expire_if_stale
-from .models import VoiceQuestion
+from .models import CourseComment, VoiceQuestion
+from .permissions import can_delete_comment, can_edit_comment, can_reply_to_comment
 from .serializers import (
     AUDIO_CONTENT_TYPES,
     AUDIO_EXTENSIONS,
     AskSerializer,
+    CommentReplySerializer,
+    CourseCommentSerializer,
     VoiceQuestionCreateSerializer,
     VoiceQuestionSerializer,
 )
@@ -223,3 +228,81 @@ class VoiceConfigView(APIView):
                 "server_time": timezone.now(),
             }
         )
+
+
+class CommentCreateThrottle(UserRateThrottle):
+    """Limits how fast one user can post comments (anti-spam)."""
+
+    scope = "course_comments"
+    rate = "30/hour"
+
+
+class CourseCommentViewSet(viewsets.ModelViewSet):
+    """Comments on a course and the teacher's replies.
+
+    ``?course=<id>`` lists a course's comments (every signed-in user can read them).
+    Without it: a student gets their own comments, a teacher the comments on their
+    courses, an admin every comment. ``?unanswered=1`` keeps comments without a reply.
+    """
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = CourseCommentSerializer
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def get_throttles(self):
+        if self.action == "create":
+            return [CommentCreateThrottle()]
+        return super().get_throttles()
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = CourseComment.objects.select_related("author", "replied_by", "course")
+        if self.action != "list":
+            return queryset
+
+        course = self.request.query_params.get("course")
+        if course:
+            if not course.isdigit():
+                raise serializers.ValidationError({"course": "Invalid course."})
+            queryset = queryset.filter(course_id=course)
+        elif user.role == User.Role.TEACHER:
+            queryset = queryset.filter(course__owner=user)
+        elif user.role != User.Role.ADMIN:
+            queryset = queryset.filter(author=user)
+
+        if self.request.query_params.get("unanswered") in {"1", "true"}:
+            queryset = queryset.filter(reply="")
+        return queryset
+
+    def perform_create(self, serializer):
+        if self.request.user.role != User.Role.STUDENT:
+            raise PermissionDenied("Only students can comment on a course.")
+        serializer.save(author=self.request.user)
+
+    def perform_update(self, serializer):
+        if not can_edit_comment(self.request.user, serializer.instance):
+            raise PermissionDenied("You can only edit your own comments.")
+        serializer.save(edited_at=timezone.now())
+
+    def perform_destroy(self, instance):
+        if not can_delete_comment(self.request.user, instance):
+            raise PermissionDenied("You cannot delete this comment.")
+        instance.delete()
+
+    @action(detail=True, methods=["post", "delete"])
+    def reply(self, request, pk=None):
+        """POST writes or replaces the reply, DELETE removes it."""
+        comment = self.get_object()
+        if not can_reply_to_comment(request.user, comment):
+            raise PermissionDenied("Only the teacher of this course can reply.")
+
+        if request.method == "DELETE":
+            comment.reply, comment.replied_by, comment.replied_at = "", None, None
+        else:
+            payload = CommentReplySerializer(data=request.data)
+            payload.is_valid(raise_exception=True)
+            comment.reply = payload.validated_data["reply"]
+            comment.replied_by = request.user
+            comment.replied_at = timezone.now()
+        comment.save(update_fields=["reply", "replied_by", "replied_at"])
+        return Response(self.get_serializer(comment).data)

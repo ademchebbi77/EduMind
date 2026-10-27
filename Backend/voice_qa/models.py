@@ -83,3 +83,37 @@ class VoiceQuestion(models.Model):
     @property
     def is_busy(self):
         return self.status in {self.Status.TRANSCRIBING, self.Status.ANSWERING}
+
+
+class CourseComment(models.Model):
+    """A student's comment on a course, with an optional reply from the course teacher."""
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="course_comments",
+    )
+    text = models.TextField()
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    reply = models.TextField(blank=True)
+    replied_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="course_comment_replies",
+    )
+    replied_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "course comment"
+        verbose_name_plural = "course comments"
+        indexes = [models.Index(fields=["course", "-created_at"])]
+
+    def __str__(self):
+        return self.text[:80]

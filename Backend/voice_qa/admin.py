@@ -1,6 +1,14 @@
 from django.contrib import admin
 
-from .models import VoiceQuestion
+from .models import CourseComment, VoiceQuestion
+
+
+@admin.register(CourseComment)
+class CourseCommentAdmin(admin.ModelAdmin):
+    list_display = ("__str__", "author", "course", "replied_by", "created_at")
+    list_filter = ("created_at", "replied_at")
+    search_fields = ("text", "reply", "author__email", "course__title")
+    raw_id_fields = ("course", "author", "replied_by")
 
 
 @admin.register(VoiceQuestion)

@@ -7,7 +7,8 @@ from rest_framework import serializers
 
 from courses.models import Course
 
-from .models import VoiceQuestion
+from .models import CourseComment, VoiceQuestion
+from .permissions import can_delete_comment, can_edit_comment, can_reply_to_comment
 
 # Formats accepted by the Whisper API that browsers can record or users upload.
 AUDIO_EXTENSIONS = ("webm", "ogg", "oga", "mp3", "wav", "m4a", "mp4", "mpeg", "mpga", "flac")
@@ -100,3 +101,89 @@ class VoiceQuestionSerializer(serializers.ModelSerializer):
 
     def get_audio_url(self, obj):
         return reverse("voice-question-audio", kwargs={"pk": obj.pk})
+
+
+MAX_COMMENT_CHARS = 2000
+
+
+def _clean_comment(value):
+    value = value.strip()
+    if not value:
+        raise serializers.ValidationError("Write something first.")
+    return value
+
+
+class CourseCommentSerializer(serializers.ModelSerializer):
+    """A comment and what the current user may do with it."""
+
+    course = serializers.PrimaryKeyRelatedField(queryset=Course.objects.all())
+    text = serializers.CharField(max_length=MAX_COMMENT_CHARS, trim_whitespace=False)
+    author_name = serializers.SerializerMethodField()
+    replied_by_name = serializers.SerializerMethodField()
+    is_mine = serializers.SerializerMethodField()
+    can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    can_reply = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CourseComment
+        fields = (
+            "id",
+            "course",
+            "author",
+            "author_name",
+            "text",
+            "created_at",
+            "edited_at",
+            "reply",
+            "replied_by_name",
+            "replied_at",
+            "is_mine",
+            "can_edit",
+            "can_delete",
+            "can_reply",
+        )
+        read_only_fields = ("author", "edited_at", "reply", "replied_at")
+
+    def validate_text(self, value):
+        return _clean_comment(value)
+
+    def validate_course(self, value):
+        # A comment stays on its course.
+        if self.instance is not None and value != self.instance.course:
+            raise serializers.ValidationError("A comment cannot be moved to another course.")
+        return value
+
+    @staticmethod
+    def _name(user):
+        if user is None:
+            return ""
+        return user.get_full_name().strip() or user.email
+
+    def get_author_name(self, comment):
+        return self._name(comment.author)
+
+    def get_replied_by_name(self, comment):
+        return self._name(comment.replied_by) if comment.reply else ""
+
+    def _user(self):
+        return self.context["request"].user
+
+    def get_is_mine(self, comment):
+        return comment.author_id == self._user().id
+
+    def get_can_edit(self, comment):
+        return can_edit_comment(self._user(), comment)
+
+    def get_can_delete(self, comment):
+        return can_delete_comment(self._user(), comment)
+
+    def get_can_reply(self, comment):
+        return can_reply_to_comment(self._user(), comment)
+
+
+class CommentReplySerializer(serializers.Serializer):
+    reply = serializers.CharField(max_length=MAX_COMMENT_CHARS, trim_whitespace=False)
+
+    def validate_reply(self, value):
+        return _clean_comment(value)
